@@ -45,54 +45,55 @@
 #include "osal.h"
 #include "OSAL_Timers.h"
 #include "hal_mcu.h"
-
+#include <stdio.h>
+#include <string.h>
 /*-------------------------------------------------------------------------------------------------
                                                MACROS
  ------------------------------------------------------------------------------------------------*/
 
 /* Get 1 byte from UART */
-#define HAL_UART_GETBYTE() UCA1RXBUF
+#define HAL_UART_GETBYTE() UCA0RXBUF
 
 /* Put 1 byte into the UART */
-#define HAL_UART_PUTBYTE(x)            { UCA1TXBUF = (x); }
+#define HAL_UART_PUTBYTE(x)            { UCA0TXBUF = (x); }
 
 /* Set Baud rate */
-#define HAL_UART_SETBAUDRATE(baudrate) { UCA1BR1 = (baudrate) >> 8;  UCA1BR0 = (baudrate); }
+#define HAL_UART_SETBAUDRATE(baudrate) { UCA0BR1 = (baudrate) >> 8;  UCA0BR0 = (baudrate); }
 
 /* Set Source Clock */
-#define HAL_UART_SET_SRC_CLK()         { UCA1CTL1 |= UCSSEL_3; } /* SMCLK */
+#define HAL_UART_SET_SRC_CLK()         { UCA0CTL1 |= UCSSEL_3; } /* SMCLK */
 
 /* Setup TXD and RXD Port */
-#define HAL_UART_PORT_CONFIG()         { P5SEL |= BV(6) | BV(7); P5DIR |= BV(6); P5DIR &= ~BV(7); }  /* P5.6, P5.7 - UCA0TXD and RXD */
+#define HAL_UART_PORT_CONFIG()         { P3SEL |= BV(4) | BV(5); P3DIR |= BV(4); P3DIR &= ~BV(5); }  /* P3.4, P3.5 - UCA0TXD and RXD */
 
 /* Setup format frame */
-#define HAL_UART_FRAME_CONFIG()        { UCA1CTL0 = UCMODE_0;   /* UART Mode */        \
-                                         UCA1CTL0 &= ~UCPEN;    /* Disable parity */   \
-                                         UCA1CTL0 &= ~UCSPB;    /* 1 stop bit */       \
-                                         UCA1CTL0 &= ~UC7BIT;   /* 8bit data*/         \
-                                         UCA1CTL0 &= ~UCSYNC; } /* Asynchronous mode */
+#define HAL_UART_FRAME_CONFIG()        { UCA0CTL0 = UCMODE_0;   /* UART Mode */        \
+                                         UCA0CTL0 &= ~UCPEN;    /* Disable parity */   \
+                                         UCA0CTL0 &= ~UCSPB;    /* 1 stop bit */       \
+                                         UCA0CTL0 &= ~UC7BIT;   /* 8bit data*/         \
+                                         UCA0CTL0 &= ~UCSYNC; } /* Asynchronous mode */
 
 /* Enable/Disable TX INT */
-#define HAL_UART_TX_INT_ENABLE()       { UCA1IE |= UCTXIE; }
-#define HAL_UART_TX_INT_DISABLE()      { UCA1IE &= ~UCTXIE; }
+#define HAL_UART_TX_INT_ENABLE()       { UCA0IE |= UCTXIE; }
+#define HAL_UART_TX_INT_DISABLE()      { UCA0IE &= ~UCTXIE; }
 
 /* Enable/Disable RX */
 #define HAL_UART_RX_ENABLE()           /* N/A */
 #define HAL_UART_RX_DISABLE()          /* N/A */
 
 /* Enable/Disable TX INT */
-#define HAL_UART_RX_INT_ENABLE()       { UCA1IE |= UCRXIE; }
-#define HAL_UART_RX_INT_DISABLE()      { UCA1IE &= ~UCRXIE; }
+#define HAL_UART_RX_INT_ENABLE()       { UCA0IE |= UCRXIE; }
+#define HAL_UART_RX_INT_DISABLE()      { UCA0IE &= ~UCRXIE; }
 
 /* Enable/Disable SWRST */
-#define HAL_UART_SWRST_ENABLE()        { UCA1CTL1 |= UCSWRST; }
-#define HAL_UART_SWRST_DISABLE()       { UCA1CTL1 &= ~UCSWRST; }
+#define HAL_UART_SWRST_ENABLE()        { UCA0CTL1 |= UCSWRST; }
+#define HAL_UART_SWRST_DISABLE()       { UCA0CTL1 &= ~UCSWRST; }
 
 /* Get Rx/Tx status bit */
-#define HAL_UART_GET_RXTX_STATUS()    (UCA1IFG & (UCRXIFG | UCRXIFG))
-#define HAL_UART_GET_RX_STATUS()      (UCA1IFG & UCRXIFG)
-#define HAL_UART_GET_TX_STATUS()      (UCA1IFG & UCTXIFG)
-#define HAL_UART_CLR_TX_STATUS()      (UCA1IFG &= ~UCTXIFG)
+#define HAL_UART_GET_RXTX_STATUS()    (UCA0IFG & (UCRXIFG | UCRXIFG))
+#define HAL_UART_GET_RX_STATUS()      (UCA0IFG & UCRXIFG)
+#define HAL_UART_GET_TX_STATUS()      (UCA0IFG & UCTXIFG)
+#define HAL_UART_CLR_TX_STATUS()      (UCA0IFG &= ~UCTXIFG)
 
 /* UART CTS and RTS */
 #define HAL_UART_CTS_PORT             /* N/A */
@@ -433,7 +434,7 @@ uint16 HalUARTWrite ( uint8 port, uint8 *pBuffer, uint16 length )
   {
     cnt = idx - cnt;
   }
-   
+
   // Accept "all-or-none" on write request.
   if (cnt < length)
   {
@@ -468,6 +469,57 @@ uint16 HalUARTWrite ( uint8 port, uint8 *pBuffer, uint16 length )
   return length;  // Return the number of bytes actually put into the buffer.
 }
 
+
+//==================================================================
+/*
+ * Write a string to the uart *
+ */
+uint16 HalUARTWriteString ( uint8 port, char* str ){
+  return HalUARTWrite(port, (unsigned char*) str, strlen(str));
+}
+
+
+//==================================================================
+uint16 HalUARTWriteLine ( uint8 port, char* str ){
+  HalUARTWriteString(port, str);
+  return HalUARTWriteString(port, "\n");
+}
+
+
+//==================================================================
+uint16 HalUARTWriteTwoLine ( uint8 port, char* str1, char* str2){
+  HalUARTWriteLine(port, str1);
+  return HalUARTWriteLine(port, str2);
+}
+
+//==================================================================
+uint16 HalUARTWriteNumber ( uint8 port, uint32 num, uint8 radix ){
+  uint8 buf[33];
+
+  _ltoa( num, &buf[0], radix );
+  return HalUARTWriteString( port, (char*) buf );
+}
+
+
+//==================================================================
+uint16 HalUARTWriteInt ( uint8 port, int32 num, uint8 radix ){
+  if (num >0){
+    return HalUARTWriteNumber(port, (uint32) num, radix);
+  }
+  else{
+    HalUARTWriteString(port, "-");
+    return HalUARTWriteNumber(port, (uint32) (-num), radix);
+  }
+}
+
+
+//=================================================================
+uint16 HalUARTWriteStringValue(uint8 port, char *title, uint32 value, uint8 format){
+  HalUARTWriteString(port, title);
+  HalUARTWriteString(port, " ");
+  HalUARTWriteNumber(port, value, format);
+  return HalUARTWriteString(port, "\n");
+}
 /*************************************************************************************************
  * @fn      Hal_UART_RxBufLen()
  *

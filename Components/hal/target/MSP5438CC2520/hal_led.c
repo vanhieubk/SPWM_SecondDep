@@ -1,30 +1,30 @@
 /***************************************************************************************************
   Filename:       hal_led.c
-  Revised:        $Date: 2011-09-15 16:51:11 -0700 (Thu, 15 Sep 2011) $
-  Revision:       $Revision: 27590 $
+  Revised:        $Date: 2012-02-14 12:43:32 -0800 (Tue, 14 Feb 2012) $
+  Revision:       $Revision: 29281 $
 
 
   Description:    This file contains the interface to the HAL LED Service.
 
 
-  Copyright 2006-2011 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2006-2012 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
   who downloaded the software, his/her employer (which must be your employer)
-  and Texas Instruments Incorporated (the "License").  You may not use this
+  and Texas Instruments Incorporated (the "License"). You may not use this
   Software unless you agree to abide by the terms of the License. The License
   limits your use, and you acknowledge, that the Software may not be modified,
   copied or distributed unless embedded on a Texas Instruments microcontroller
   or used solely and exclusively in conjunction with a Texas Instruments radio
-  frequency transceiver, which is integrated into your product.  Other than for
+  frequency transceiver, which is integrated into your product. Other than for
   the foregoing purpose, you may not use, reproduce, copy, prepare derivative
   works of, modify, distribute, perform, display or sell this Software and/or
   its documentation for any purpose.
 
   YOU FURTHER ACKNOWLEDGE AND AGREE THAT THE SOFTWARE AND DOCUMENTATION ARE
-  PROVIDED “AS IS” WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, 
-  INCLUDING WITHOUT LIMITATION, ANY WARRANTY OF MERCHANTABILITY, TITLE, 
+  PROVIDED “AS IS” WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+  INCLUDING WITHOUT LIMITATION, ANY WARRANTY OF MERCHANTABILITY, TITLE,
   NON-INFRINGEMENT AND FITNESS FOR A PARTICULAR PURPOSE. IN NO EVENT SHALL
   TEXAS INSTRUMENTS OR ITS LICENSORS BE LIABLE OR OBLIGATED UNDER CONTRACT,
   NEGLIGENCE, STRICT LIABILITY, CONTRIBUTION, BREACH OF WARRANTY, OR OTHER
@@ -35,7 +35,7 @@
   (INCLUDING BUT NOT LIMITED TO ANY DEFENSE THEREOF), OR OTHER SIMILAR COSTS.
 
   Should you have any questions regarding your right to use this Software,
-  contact Texas Instruments Incorporated at www.TI.com. 
+  contact Texas Instruments Incorporated at www.TI.com.
 **************************************************************************************************/
 
 /***************************************************************************************************
@@ -372,6 +372,13 @@ void HalLedOnOff( uint8 leds, uint8 mode )
       HAL_TURN_OFF_LED4();
   }
 
+  if ( leds & HAL_LED_5 )
+  {
+    if ( mode == HAL_LED_MODE_ON )
+      HAL_TURN_ON_LED5();
+    else
+      HAL_TURN_OFF_LED5();
+  }
     // Remember current state
   if ( mode )
     ledState |= leds;

@@ -1,12 +1,12 @@
 /**************************************************************************************************
   Filename:       hal_uart.h
-  Revised:        $Date: 2012-10-17 09:45:25 -0700 (Wed, 17 Oct 2012) $
-  Revision:       $Revision: 31844 $
+  Revised:        $Date: 2009-03-09 05:27:36 -0700 (Mon, 09 Mar 2009) $
+  Revision:       $Revision: 19340 $
 
   Description:    This file contains the interface to the UART Service.
 
 
-  Copyright 2005-2012 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2005-2009 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -64,6 +64,9 @@ extern "C"
 /*
    Serial Port Baudrate Settings
    Have to match with baudrate table
+
+  Note that when using interrupt service based UART configuration (as opposed to DMA)
+  higher baudrate such as 115200bps may have problem when radio is operational at the same time.
 */
 #define HAL_UART_BR_9600   0x00
 #define HAL_UART_BR_19200  0x01
@@ -184,6 +187,18 @@ extern uint16 HalUARTRead ( uint8 port, uint8 *pBuffer, uint16 length );
  * Write a buff to the uart *
  */
 extern uint16 HalUARTWrite ( uint8 port, uint8 *pBuffer, uint16 length );
+
+
+extern uint16 HalUARTWriteString ( uint8 port, char* str );
+extern uint16 HalUARTWriteLine ( uint8 port, char* str );
+extern uint16 HalUARTWriteTwoLine ( uint8 port, char* str1, char* str2);
+/*
+ * Write a string to the uart *
+ */
+extern uint16 HalUARTWriteNumber ( uint8 port, uint32 num, uint8 radix );
+extern uint16 HalUARTWriteInt ( uint8 port, int32 num, uint8 radix );
+
+uint16 HalUARTWriteStringValue(uint8 port, char *title, uint32 value, uint8 format);
 
 /*
  * Write a buffer to the UART

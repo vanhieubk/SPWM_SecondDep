@@ -168,10 +168,18 @@ extern uint8 macMcuTimerProcessFallingEdgeSFDSync;
  *                                  RESETN Pin Configuration
  * ------------------------------------------------------------------------------------------------
  */
-#define HAL_MAC_RESETN_GPIO_BIT                 2
-#define HAL_MAC_DRIVE_RESETN_PIN_HIGH()         st( P1OUT |=  BV(HAL_MAC_RESETN_GPIO_BIT); ) /* atomic operation */
-#define HAL_MAC_DRIVE_RESETN_PIN_LOW()          st( P1OUT &= ~BV(HAL_MAC_RESETN_GPIO_BIT); ) /* atomic operation */
-#define HAL_MAC_CONFIG_RESETN_PIN_AS_OUTPUT()   st( P1DIR |=  BV(HAL_MAC_RESETN_GPIO_BIT); )
+#ifdef LSR_CODE
+    #define HAL_MAC_RESETN_GPIO_BIT                 6
+    #define HAL_MAC_DRIVE_RESETN_PIN_HIGH()         st( P7OUT |=  BV(HAL_MAC_RESETN_GPIO_BIT); ) /* atomic operation */
+    #define HAL_MAC_DRIVE_RESETN_PIN_LOW()          st( P7OUT &= ~BV(HAL_MAC_RESETN_GPIO_BIT); ) /* atomic operation */
+    #define HAL_MAC_CONFIG_RESETN_PIN_AS_OUTPUT()   st( P7DIR |=  BV(HAL_MAC_RESETN_GPIO_BIT); )
+#else
+    #define HAL_MAC_RESETN_GPIO_BIT                 2
+    #define HAL_MAC_DRIVE_RESETN_PIN_HIGH()         st( P1OUT |=  BV(HAL_MAC_RESETN_GPIO_BIT); ) /* atomic operation */
+    #define HAL_MAC_DRIVE_RESETN_PIN_LOW()          st( P1OUT &= ~BV(HAL_MAC_RESETN_GPIO_BIT); ) /* atomic operation */
+    #define HAL_MAC_CONFIG_RESETN_PIN_AS_OUTPUT()   st( P1DIR |=  BV(HAL_MAC_RESETN_GPIO_BIT); )
+#endif
+
 
 
 /* ------------------------------------------------------------------------------------------------
@@ -229,13 +237,13 @@ typedef halIntState_t halMacSpiIntState_t;
 #define HAL_MAC_SPI_PRESCALER   ((uint8)(HAL_CPU_CLOCK_MHZ / 8.1) + 1)
 
 /* The SPI bit rate is based on the HAL_CPU_CLOCK_MHZ
- * 
- * SMCLK(MHz) Prescaler  SPI Clock(MHz) 
- *  25.0000      4          6.25   
+ *
+ * SMCLK(MHz) Prescaler  SPI Clock(MHz)
+ *  25.0000      4          6.25
  *  20.0000      3          6.67
  *  18.0000      3          6
  *  16.0000      2          8
- *  12.0000      2          6 
+ *  12.0000      2          6
  *   8.0000      1          8
  *   4.0000      1          4
  *   1.0000      1          1

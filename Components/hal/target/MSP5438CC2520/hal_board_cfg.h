@@ -1,22 +1,22 @@
 /**************************************************************************************************
   Filename:       hal_board_cfg.h
-  Revised:        $Date: 2012-09-30 16:36:36 -0700 (Sun, 30 Sep 2012) $
-  Revision:       $Revision: 31658 $
+  Revised:        $Date: 2010-06-24 11:52:41 -0700 (Thu, 24 Jun 2010) $
+  Revision:       $Revision: 22814 $
 
   Description:    Declarations for the MSP430F5438.
 
 
-  Copyright 2006-2012 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2006-2010 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
   who downloaded the software, his/her employer (which must be your employer)
-  and Texas Instruments Incorporated (the "License"). You may not use this
+  and Texas Instruments Incorporated (the "License").  You may not use this
   Software unless you agree to abide by the terms of the License. The License
   limits your use, and you acknowledge, that the Software may not be modified,
   copied or distributed unless embedded on a Texas Instruments microcontroller
   or used solely and exclusively in conjunction with a Texas Instruments radio
-  frequency transceiver, which is integrated into your product. Other than for
+  frequency transceiver, which is integrated into your product.  Other than for
   the foregoing purpose, you may not use, reproduce, copy, prepare derivative
   works of, modify, distribute, perform, display or sell this Software and/or
   its documentation for any purpose.
@@ -87,28 +87,29 @@
  *                                       LED Configuration
  * ------------------------------------------------------------------------------------------------
  */
-#define HAL_NUM_LEDS            2
+#define HAL_NUM_LEDS            5
 #define HAL_LED_BLINK_DELAY()   st( { volatile uint32 i; for (i=0; i<0x34000; i++) { }; } )
 
-/* LED1 - GREEN */
-#define LED1_BV           BV(0)
-#define LED1_PORT         P1OUT
-#define LED1_DDR          P1DIR
-
-/* LED2 - RED */
-#define LED2_BV           BV(1)
-#define LED2_PORT         P1OUT
-#define LED2_DDR          P1DIR
-
-/* LED3 - not supported - set to LED 1 for now */
-#define LED3_BV           LED1_BV
-#define LED3_PORT         LED1_PORT
-#define LED3_DDR          LED1_DDR
-
-/* LED4 - not supported - set to LED 2 for now */
-#define LED4_BV           LED2_BV
-#define LED4_PORT         LED2_PORT
-#define LED4_DDR          LED2_DDR
+/* LED1 */
+#define LED1_BV           BV(1)
+#define LED1_PORT         P4OUT
+#define LED1_DDR          P4DIR
+/* LED2 */
+#define LED2_BV           BV(0)
+#define LED2_PORT         P4OUT
+#define LED2_DDR          P4DIR
+/* LED3 */
+#define LED3_BV           BV(6)
+#define LED3_PORT         P8OUT
+#define LED3_DDR          P8DIR
+/* LED4 */
+#define LED4_BV           BV(5)
+#define LED4_PORT         P8OUT
+#define LED4_DDR          P8DIR
+/* LED5 */
+#define LED5_BV           BV(4)
+#define LED5_PORT         P8OUT
+#define LED5_DDR          P8DIR
 
 
 /* ------------------------------------------------------------------------------------------------
@@ -119,50 +120,23 @@
 #define ACTIVE_LOW        !
 #define ACTIVE_HIGH       !!    /* double negation forces result to be '1' */
 
-/* UP */
-#define PUSH1_BV          BV(4)
+/* USER1 */
+#define PUSH1_BV          BV(0)
 #define PUSH1_PORT        P2IN
 #define PUSH1_POLARITY    ACTIVE_LOW
-
-/* RIGHT */
-#define PUSH2_BV          BV(2)
+/* USER2 */
+#define PUSH2_BV          BV(1)
 #define PUSH2_PORT        P2IN
 #define PUSH2_POLARITY    ACTIVE_LOW
-
-/* DOWN */
-#define PUSH3_BV          BV(5)
+/* KEY3 */
+#define PUSH3_BV          BV(2)
 #define PUSH3_PORT        P2IN
 #define PUSH3_POLARITY    ACTIVE_LOW
-
-/* LEFT */
-#define PUSH4_BV          BV(1)
+/* KEY4 */
+#define PUSH4_BV          BV(3)
 #define PUSH4_PORT        P2IN
 #define PUSH4_POLARITY    ACTIVE_LOW
 
-/* PUSH */
-#define PUSH5_BV          BV(3)
-#define PUSH5_PORT        P2IN
-#define PUSH5_POLARITY    ACTIVE_LOW
-
-/* BUTTON 1 */
-#define PUSH6_BV          BV(6)
-#define PUSH6_PORT        P2IN
-#define PUSH6_POLARITY    ACTIVE_LOW
-
-/* BUTTON 2 */
-#define PUSH7_BV          BV(7)
-#define PUSH7_PORT        P2IN
-#define PUSH7_POLARITY    ACTIVE_LOW
-
-
-/* ------------------------------------------------------------------------------------------------
- *                                    LCD Configuration
- * ------------------------------------------------------------------------------------------------
- */
-
-/* LCD Max Chars and Buffer */
-#define HAL_LCD_MAX_CHARS   16
-#define HAL_LCD_MAX_BUFF    25
 
 
 /* ------------------------------------------------------------------------------------------------
@@ -249,12 +223,13 @@
   HAL_TURN_OFF_LED2();                                           \
   HAL_TURN_OFF_LED3();                                           \
   HAL_TURN_OFF_LED4();                                           \
-                                                                 \
+  HAL_TURN_OFF_LED5();                                           \
   /* set direction for GPIO outputs  */                          \
   LED1_DDR |= LED1_BV;                                           \
   LED2_DDR |= LED2_BV;                                           \
   LED3_DDR |= LED3_BV;                                           \
   LED4_DDR |= LED4_BV;                                           \
+  LED5_DDR |= LED5_BV;                                           \
                                                                  \
   /* configure board ID GPIO */                                  \
   HAL_BOARD_ID_CONFIG();                                         \
@@ -268,28 +243,32 @@
 #define HAL_PUSH_BUTTON2()        (PUSH2_POLARITY (PUSH2_PORT & PUSH2_BV))
 #define HAL_PUSH_BUTTON3()        (PUSH3_POLARITY (PUSH3_PORT & PUSH3_BV))
 #define HAL_PUSH_BUTTON4()        (PUSH4_POLARITY (PUSH4_PORT & PUSH4_BV))
-#define HAL_PUSH_BUTTON5()        (PUSH5_POLARITY (PUSH5_PORT & PUSH5_BV))
-#define HAL_PUSH_BUTTON6()        (PUSH6_POLARITY (PUSH6_PORT & PUSH6_BV))
-#define HAL_PUSH_BUTTON7()        (PUSH7_POLARITY (PUSH7_PORT & PUSH7_BV))
+
 
 /* ----------- LED's ---------- */
 #define HAL_TURN_OFF_LED1()       st( LED1_PORT &= ~LED1_BV; )
 #define HAL_TURN_OFF_LED2()       st( LED2_PORT &= ~LED2_BV; )
 #define HAL_TURN_OFF_LED3()       st( LED3_PORT &= ~LED3_BV; )
 #define HAL_TURN_OFF_LED4()       st( LED4_PORT &= ~LED4_BV; )
+#define HAL_TURN_OFF_LED5()       st( LED5_PORT &= ~LED5_BV; )
 
 #define HAL_TURN_ON_LED1()        st( LED1_PORT |=  LED1_BV; )
 #define HAL_TURN_ON_LED2()        st( LED2_PORT |=  LED2_BV; )
 #define HAL_TURN_ON_LED3()        st( LED3_PORT |=  LED3_BV; )
 #define HAL_TURN_ON_LED4()        st( LED4_PORT |=  LED4_BV; )
+#define HAL_TURN_ON_LED5()        st( LED5_PORT |=  LED5_BV; )
 
 #define HAL_TOGGLE_LED1()         st( LED1_PORT ^=  LED1_BV; )
 #define HAL_TOGGLE_LED2()         st( LED2_PORT ^=  LED2_BV; )
 #define HAL_TOGGLE_LED3()         st( LED3_PORT ^=  LED3_BV; )
 #define HAL_TOGGLE_LED4()         st( LED4_PORT ^=  LED4_BV; )
+#define HAL_TOGGLE_LED5()         st( LED5_PORT ^=  LED5_BV; )
 
 #define HAL_STATE_LED1()          (LED1_PORT & LED1_BV)
 #define HAL_STATE_LED2()          (LED2_PORT & LED2_BV)
+#define HAL_STATE_LED3()          (LED3_PORT & LED3_BV)
+#define HAL_STATE_LED4()          (LED4_PORT & LED4_BV)
+#define HAL_STATE_LED5()          (LED5_PORT & LED5_BV)
 
 /* ----------- Minimum safe bus voltage ---------- */
 
@@ -311,7 +290,7 @@
 
 /* Set to TRUE enable ADC usage, FALSE disable it */
 #ifndef HAL_ADC
-#define HAL_ADC TRUE
+#define HAL_ADC FALSE
 #endif
 
 /* Set to TRUE enable LCD usage, FALSE disable it */
@@ -352,7 +331,7 @@
 #define INTERRUPT_TIMERB_OC_CC1_6()   HAL_ISR_FUNCTION( haBoardTimerB1Isr, TIMERB1_VECTOR )
 
 /* ----------- UART interrupts ---------- */
-#define INTERRUPT_UART()    HAL_ISR_FUNCTION( halBoardUart1Isr, USCI_A1_VECTOR /*USCIA1_VECTOR*/ )
+#define INTERRUPT_UART()    HAL_ISR_FUNCTION( halBoardUart0Isr, USCI_A0_VECTOR /*USCIA0_VECTOR*/ )
 
 /* ----------- key interrupts ---------- */
 #define INTERRUPT_KEYBD()             HAL_ISR_FUNCTION( halBoardPort1Isr, PORT2_VECTOR )
