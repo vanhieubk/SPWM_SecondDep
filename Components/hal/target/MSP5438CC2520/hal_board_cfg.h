@@ -138,20 +138,6 @@
 #define PUSH4_POLARITY    ACTIVE_LOW
 
 
-
-/* ------------------------------------------------------------------------------------------------
- *                                     Board REV identification
- * ------------------------------------------------------------------------------------------------
- */
-
-#define BOARD_ID_PIN                          BV(7)
-#define BOARD_ID_PORT                         P8IN
-#define HAL_BOARD_ID_CONFIG()             st( P8DIR &= ~BV(7); P8REN |= BV(7); P8OUT |= BV(7); )
-#define HAL_BOARD_ID_DISABLE_PULLUP()     st( P8REN &= ~BV(7); )
-#define HAL_MSP_EXP430F5438_REV_02()        ((BOARD_ID_PORT & BOARD_ID_PIN) != 0)
-#define HAL_MSP_EXP430F5438_REV_03()        ((BOARD_ID_PORT & BOARD_ID_PIN) == 0)
-
-
 /* ------------------------------------------------------------------------------------------------
  *                         OSAL NV implemented by internal flash pages.
  * ------------------------------------------------------------------------------------------------
@@ -230,9 +216,6 @@
   LED3_DDR |= LED3_BV;                                           \
   LED4_DDR |= LED4_BV;                                           \
   LED5_DDR |= LED5_BV;                                           \
-                                                                 \
-  /* configure board ID GPIO */                                  \
-  HAL_BOARD_ID_CONFIG();                                         \
 }
 
 /* ----------- Debounce ---------- */
@@ -313,11 +296,7 @@
 
 /* Set to TRUE enable UART usage, FALSE disable it */
 #ifndef HAL_UART
-#if (defined ZAPP_P1) || (defined ZAPP_P2) || (defined ZTOOL_P1) || (defined ZTOOL_P2)
 #define HAL_UART TRUE
-#else
-#define HAL_UART FALSE
-#endif
 #endif
 
 

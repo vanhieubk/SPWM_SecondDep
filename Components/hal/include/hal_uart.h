@@ -183,22 +183,20 @@ extern void HalUARTClose ( uint8 port );
  */
 extern uint16 HalUARTRead ( uint8 port, uint8 *pBuffer, uint16 length );
 
-/*
- * Write a buff to the uart *
- */
-extern uint16 HalUARTWrite ( uint8 port, uint8 *pBuffer, uint16 length );
+/* Send related functions */
+extern uint16 HalUARTOutBuf ( uint8 port, uint8 *pBuffer, uint16 length );
 
+extern uint16 HalUARTPrintStr (uint8 port, char* str);
+extern uint16 HalUARTPrintUInt (uint8 port, uint32 num, uint8 radix);
+extern uint16 HalUARTPrintInt (uint8 port, int32 num, uint8 radix);
+extern uint16 HalUARTPrintStrAndUInt (uint8 port, char *title, uint32 value, uint8 radix);
+extern uint16 HalUARTPrintStrAndInt (uint8 port, char *title, int32 value, uint8 radix);
 
-extern uint16 HalUARTWriteString ( uint8 port, char* str );
-extern uint16 HalUARTWriteLine ( uint8 port, char* str );
-extern uint16 HalUARTWriteTwoLine ( uint8 port, char* str1, char* str2);
-/*
- * Write a string to the uart *
- */
-extern uint16 HalUARTWriteNumber ( uint8 port, uint32 num, uint8 radix );
-extern uint16 HalUARTWriteInt ( uint8 port, int32 num, uint8 radix );
-
-uint16 HalUARTWriteStringValue(uint8 port, char *title, uint32 value, uint8 format);
+extern uint16 HalUARTPrintnlStr (uint8 port, char* str);
+extern uint16 HalUARTPrintnlUInt (uint8 port, uint32 num, uint8 radix);
+extern uint16 HalUARTPrintnlInt (uint8 port, int32 num, uint8 radix);
+extern uint16 HalUARTPrintnlStrAndUInt (uint8 port, char *title, uint32 value, uint8 radix);
+extern uint16 HalUARTPrintnlStrAndInt (uint8 port, char *title, int32 value, uint8 radix);
 
 /*
  * Write a buffer to the UART

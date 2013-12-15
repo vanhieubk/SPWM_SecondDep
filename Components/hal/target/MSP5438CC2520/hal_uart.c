@@ -40,6 +40,10 @@
 /*********************************************************************
  * INCLUDES
  */
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
 #include "hal_types.h"
 #include "hal_uart.h"
 #include "osal.h"
@@ -122,7 +126,7 @@ uint16 UBRRTable[] = { HAL_GET_UBRR (9600),
 /*-------------------------------------------------------------------------------------------------
                                          FUNCTIONS - LOCAL
 -------------------------------------------------------------------------------------------------*/
-
+static void MyItoa(uint32 num, uint8 outStr[], uint8 radix );
 static void Hal_UART_BufferInit(void);
 static void Hal_UART_RxProcessEvent(void);
 static void Hal_UART_TxProcessEvent(void);
@@ -131,6 +135,29 @@ static void Hal_UART_SendCallBack(uint8 port, uint8 event);
 /*-------------------------------------------------------------------------------------------------
                                   Application Level Functions
 -------------------------------------------------------------------------------------------------*/
+void MyItoa(uint32 num, uint8 outStr[], uint8 radix){
+  uint32 quotient, remainder;
+  char     storageStr[33];
+  int      count, index; //must int type, uint is incorrect
+
+  remainder = num;
+  count     = 0;
+  do{
+    quotient    = remainder % radix;
+    remainder   = remainder / radix;
+    if (quotient < 10){
+      storageStr[count++]  = 0x30 | ((uint8) quotient);
+    }
+    else{
+      storageStr[count++]  = (uint8) (quotient+55);
+    }
+  }while (remainder !=0);
+  for(index=0; index<count; index++){
+    outStr[index] = storageStr[count-index-1];
+  }
+  outStr[index] = '\0';
+}
+
 
 /*************************************************************************************************
  * @fn      HalUARTInit()
@@ -399,17 +426,13 @@ uint16 HalUARTRead ( uint8 port, uint8 *pBuffer, uint16 length )
 }
 
 /*************************************************************************************************
- * @fn      HalUARTWrite()
- *
  * @brief   Write a buffer to the UART
- *
  * @param   port    - UART port (not used.)
  *          pBuffer - pointer to the buffer that will be written
  *          length  - length of
- *
  * @return  length of the buffer that was sent
  *************************************************************************************************/
-uint16 HalUARTWrite ( uint8 port, uint8 *pBuffer, uint16 length )
+uint16 HalUARTOutBuf (uint8 port, uint8 *pBuffer, uint16 length)
 {
   uint16 cnt, idx;
   halIntState_t intState;
@@ -471,55 +494,83 @@ uint16 HalUARTWrite ( uint8 port, uint8 *pBuffer, uint16 length )
 
 
 //==================================================================
-/*
- * Write a string to the uart *
- */
-uint16 HalUARTWriteString ( uint8 port, char* str ){
-  return HalUARTWrite(port, (unsigned char*) str, strlen(str));
+uint16 HalUARTPrintStr ( uint8 port, char* str ){
+  return HalUARTOutBuf(port, (unsigned char*) str, strlen(str));
 }
 
 
 //==================================================================
-uint16 HalUARTWriteLine ( uint8 port, char* str ){
-  HalUARTWriteString(port, str);
-  return HalUARTWriteString(port, "\n");
-}
-
-
-//==================================================================
-uint16 HalUARTWriteTwoLine ( uint8 port, char* str1, char* str2){
-  HalUARTWriteLine(port, str1);
-  return HalUARTWriteLine(port, str2);
-}
-
-//==================================================================
-uint16 HalUARTWriteNumber ( uint8 port, uint32 num, uint8 radix ){
+uint16 HalUARTPrintUInt ( uint8 port, uint32 num, uint8 radix ){
   uint8 buf[33];
 
-  _ltoa( num, &buf[0], radix );
-  return HalUARTWriteString( port, (char*) buf );
+  MyItoa( num, &buf[0], radix );
+  return HalUARTPrintStr( port, (char*) buf );
 }
 
 
 //==================================================================
-uint16 HalUARTWriteInt ( uint8 port, int32 num, uint8 radix ){
+uint16 HalUARTPrintInt ( uint8 port, int32 num, uint8 radix ){
   if (num >0){
-    return HalUARTWriteNumber(port, (uint32) num, radix);
+    return HalUARTPrintUInt(port, (uint32) num, radix);
   }
   else{
-    HalUARTWriteString(port, "-");
-    return HalUARTWriteNumber(port, (uint32) (-num), radix);
+    HalUARTPrintStr(port, "-");
+    return HalUARTPrintUInt(port, (uint32) (-num), radix);
   }
 }
 
 
 //=================================================================
-uint16 HalUARTWriteStringValue(uint8 port, char *title, uint32 value, uint8 format){
-  HalUARTWriteString(port, title);
-  HalUARTWriteString(port, " ");
-  HalUARTWriteNumber(port, value, format);
-  return HalUARTWriteString(port, "\n");
+uint16 HalUARTPrintStrAndUInt(uint8 port, char *title, uint32 value, uint8 radix){
+  HalUARTPrintStr(port, title);
+  HalUARTPrintStr(port, " ");
+  return HalUARTPrintUInt(port, value, radix);
 }
+
+
+//=================================================================
+uint16 HalUARTPrintStrAndInt(uint8 port, char *title, int32 value, uint8 radix){
+  HalUARTPrintStr(port, title);
+  HalUARTPrintStr(port, " ");
+  return HalUARTPrintInt(port, value, radix);
+}
+
+
+//==================================================================
+uint16 HalUARTPrintnlStr ( uint8 port, char* str ){
+  HalUARTPrintStr(port, str);
+  return HalUARTPrintStr(port, "\n");
+}
+
+
+//==================================================================
+uint16 HalUARTPrintnlUInt (uint8 port, uint32 num, uint8 radix){
+  HalUARTPrintUInt (port, num, radix);
+  return HalUARTPrintStr(port, "\n");
+}
+
+
+//==================================================================
+uint16 HalUARTPrintnlInt (uint8 port, int32 num, uint8 radix){
+  HalUARTPrintInt (port, num, radix);
+  return HalUARTPrintStr(port, "\n");
+}
+
+
+//==================================================================
+uint16 HalUARTPrintnlStrAndUInt (uint8 port, char *title, uint32 value, uint8 radix){
+  HalUARTPrintStrAndUInt (port, title, value, radix);
+  return HalUARTPrintStr(port, "\n");
+}
+
+
+//==================================================================
+uint16 HalUARTPrintnlStrAndInt (uint8 port, char *title, int32 value, uint8 radix){
+  HalUARTPrintStrAndInt (port, title, value, radix);
+  return HalUARTPrintStr(port, "\n");
+}
+
+
 /*************************************************************************************************
  * @fn      Hal_UART_RxBufLen()
  *

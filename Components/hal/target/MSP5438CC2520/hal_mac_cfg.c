@@ -111,9 +111,6 @@ void halMacInit(void)
   HAL_MAC_SPI_CONFIG_SCLK_PIN_AS_OUTPUT();
   HAL_MAC_SPI_CONFIG_SI_PIN_AS_OUTPUT();
   HAL_MAC_SPI_CONFIG_SO_PIN_AS_INPUT();
-
-  /* We are done with the ID pin, disable pullup to save power */
-  HAL_BOARD_ID_DISABLE_PULLUP();
 }
 
 
@@ -182,9 +179,9 @@ HAL_ISR_FUNCTION( halMacFifopIsr, FIFOP_VECTOR() )
     }
   }
 
-  /* 
-   * TX interrupt is very time consuming and it may trigger more transmissions. 
-   * Don't let RX run until all TXs are completed. 
+  /*
+   * TX interrupt is very time consuming and it may trigger more transmissions.
+   * Don't let RX run until all TXs are completed.
    */
   else if (pxie & PXIFG & BV(HAL_MAC_FIFOP_GPIO_BIT)) /* FIFOP interrupt */
   {
@@ -224,13 +221,13 @@ HAL_ISR_FUNCTION( halMacFifopIsr, FIFOP_VECTOR() )
     {
       /* To get here: FIFOP = 0, FIFO = 0
        * This is the second half of the FIFOP glitch workaround.
-       * Need to clear FIFOP interrupt so that the FIFOP interrupt will be 
-       * fired on the next rising edge. 
+       * Need to clear FIFOP interrupt so that the FIFOP interrupt will be
+       * fired on the next rising edge.
        */
       HAL_MAC_CLEAR_FIFOP_INT_FLAG();
     }
   }
-  
+
   /* The RXFIFO overflow must be checked last to ensure new FIFOP interrupt */
   if (pxie & PXIFG & BV(HAL_MAC_FIFO_GPIO_BIT)) /* FIFO interrupt */
   {
@@ -238,11 +235,11 @@ HAL_ISR_FUNCTION( halMacFifopIsr, FIFOP_VECTOR() )
     if (MAC_RADIO_RX_FIFO_HAS_OVERFLOWED())
     {
       macRxFifoOverflowIsr();
- 
+
       /* Clear RX FIFO overflow exception flag */
       macSpiWriteReg(EXCFLAG0, RX_OVERFLOW_FLAG);
     }
-    
+
     /* clear interrupt */
     HAL_MAC_CLEAR_FIFO_INT_FLAG();
   }
