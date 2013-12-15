@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+
+<workspace>
+  <project>
+    <path>$WS_DIR$\msa_msp430.ewp</path>
+  </project>
+  <batchBuild>
+    <batchDefinition>
+      <name>ALL</name>
+      <member>
+        <project>msa_msp430</project>
+        <configuration>Normal</configuration>
+      </member>
+      <member>
+        <project>msa_msp430</project>
+        <configuration>Secure</configuration>
+      </member>
+    </batchDefinition>
+  </batchBuild>
+</workspace>
+
+
