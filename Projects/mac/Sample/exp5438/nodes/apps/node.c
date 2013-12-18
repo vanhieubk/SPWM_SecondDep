@@ -96,10 +96,6 @@ uint32  curStickTime   = NODE_DEFAULT_SENSING_TIME;
 /* Sensing result */
 sensing_t ssResult;
 
-/* Packet handle */
-macMcpsDataReq_t*  sentMACPkt    = NULL;
-uint8              msduHandle    = 0;
-
 /**** FUNCTIONs ****/
 void UART0Start(void);
 void NODE_UARTCallBack (uint8 port, uint8 event);
@@ -171,8 +167,7 @@ uint16 NODE_ProcessEvent(uint8 taskId, uint16 events)
           case MAC_TRANSACTION_OVERFLOW: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: overflow\n"); break;
           case MAC_COUNTER_ERROR: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: error\n"); break;
           }
-          mac_msg_deallocate((uint8 **) &sentMACPkt);
-          //mac_msg_deallocate((uint8**) &(pData->dataCnf.pDataReq));
+          mac_msg_deallocate((uint8**) &(pData->dataCnf.pDataReq));
           HalUARTPrintStr(HAL_UART_PORT_0, "DATA: sent\n");
           break;
       } /* end switch */
@@ -385,10 +380,11 @@ void NODE_DeviceStartup()
 
 
 void NODE_SendDirect(pktType_t pktType, uint8* pktPara, uint8 paraLen, uint16 dstShortAddr){
-  //if (NULL != sentMACPkt) {return;}
-  sentMACPkt = MAC_McpsDataAlloc(sizeof(pktType_t)+paraLen, MAC_SEC_LEVEL_NONE, MAC_KEY_ID_MODE_IMPLICIT );
-  //sentMACPkt = MAC_McpsDataAlloc(20, MAC_SEC_LEVEL_NONE, MAC_KEY_ID_MODE_NONE );
+  static uint8 msduHandle=0;
+  macMcpsDataReq_t*  sentMACPkt    = NULL;
+  pkt_t *dstAppPkt;
 
+  sentMACPkt = MAC_McpsDataAlloc(sizeof(pktType_t)+paraLen, MAC_SEC_LEVEL_NONE, MAC_KEY_ID_MODE_IMPLICIT );
   if ((NULL == sentMACPkt)){
     HalUARTPrintStr(HAL_UART_PORT_0, "MEM: deny\n");
     return;
@@ -399,16 +395,15 @@ void NODE_SendDirect(pktType_t pktType, uint8* pktPara, uint8 paraLen, uint16 ds
   sentMACPkt->mac.dstAddr.addr.shortAddr = dstShortAddr;
   sentMACPkt->mac.dstPanId               = node_PanId;
   sentMACPkt->mac.txOptions              = MAC_TXOPTION_NO_RETRANS;
-  sentMACPkt->mac.channel                = 11;
-  sentMACPkt->mac.power                  = 0;
+  //sentMACPkt->mac.channel                = 11;
+  //sentMACPkt->mac.power                  = 0;
   sentMACPkt->sec.securityLevel          = MAC_SEC_LEVEL_NONE;
-  sentMACPkt->sec.keyIdMode              = MAC_KEY_ID_MODE_NONE;
+  //sentMACPkt->sec.keyIdMode              = MAC_KEY_ID_MODE_NONE;
   sentMACPkt->mac.msduHandle = msduHandle++;
-
-  sentMACPkt->msdu.len = sizeof(pktType_t)+paraLen;
-  //dstAppPkt = (pkt_t*) sentMACPkt->msdu.p;
-  //dstAppPkt->pktType = pktType;
-  //osal_memcpy(&(dstAppPkt->pktPara), pktPara, paraLen);
+  //sentMACPkt->msdu.len = sizeof(pktType_t)+paraLen;
+  dstAppPkt = (pkt_t*) sentMACPkt->msdu.p;
+  dstAppPkt->pktType = pktType;
+  osal_memcpy(&(dstAppPkt->pktPara), pktPara, paraLen);
   MAC_McpsDataReq(sentMACPkt);
 }
 
