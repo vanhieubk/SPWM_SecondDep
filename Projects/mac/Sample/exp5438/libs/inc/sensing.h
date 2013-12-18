@@ -10,7 +10,6 @@ typedef struct {
   uint32_t sendSysClk;
   uint32_t sequence;
   uint16_t pHAdc[16];
-  uint16_t extTmpAdc[16];
 
   uint16_t vddAdcAvg;
   uint16_t intTmpAdcAvg;

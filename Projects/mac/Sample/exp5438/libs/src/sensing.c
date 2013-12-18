@@ -60,20 +60,21 @@ void SS_Prepare(void){
   */
 void SS_Measure(sensing_t *ssResult){
   uint16_t index;
-  uint16_t vddAdc[16], intTmpAdc[16];
+  uint16_t vddAdc[16], intTmpAdc[16], extTmpAdc[16];
   int32_t val, tmp;
+
   for (index=0; index<16; index++){
     vddAdc[index]              = _SS_GetAdc(ADC_VDD_CHANNEL);
     intTmpAdc[index]           = _SS_GetAdc(ADC_INT_TMP_CHANNEL);
     ssResult->pHAdc[index]     = _SS_GetAdc(ADC_PH_CHANNEL);
-    ssResult->extTmpAdc[index] = _SS_GetAdc(ADC_EXT_TMP_CHANNEL);
+    extTmpAdc[index]           = _SS_GetAdc(ADC_EXT_TMP_CHANNEL);
   }
 
   /* calculate Average value */
-  ssResult->vddAdcAvg = AvgWithFilter(vddAdc);
+  ssResult->vddAdcAvg    = AvgWithFilter(vddAdc);
   ssResult->intTmpAdcAvg = AvgWithFilter(intTmpAdc);
-  ssResult->pHAdcAvg = AvgWithFilter(ssResult->pHAdc);
-  ssResult->extTmpAdcAvg = AvgWithFilter(ssResult->extTmpAdc);
+  ssResult->pHAdcAvg     = AvgWithFilter(ssResult->pHAdc);
+  ssResult->extTmpAdcAvg = AvgWithFilter(extTmpAdc);
 
   /* calculate measured data */
   /* Vdd = (2.5/2^12)*N*2 (vol) = (5000*N)/4096 (miliVol) */
@@ -104,7 +105,7 @@ void SS_Measure(sensing_t *ssResult){
   else if (val < 23500)  {ssResult->extTmpVal = 28;}
   else if (val < 25000)  {ssResult->extTmpVal = 27;}
   else                   {ssResult->extTmpVal = 26;}
-  
+
   /* V = Vref/2 + PH_OFFSET + (7-pH)*PH_SLOPE (mV)
        = Vref/2 + (PH_OFFSET_ZERO + t*PH_OFFSET_DRIFT) + (7-pH)*(59.2 + t*0.2)
  <=> 2500N/4096 - 2500/2 ~= 0 + (7-pH)*(59.2 + t*0.2)
@@ -114,8 +115,6 @@ void SS_Measure(sensing_t *ssResult){
   val = (val - ((int32_t) 5120000)) * ((int32_t)250);
   val = val / ( ((int32_t)4096)*(((int32_t)310) + ((int32_t)ssResult->extTmpVal)) );
   ssResult->pHVal = (uint16_t) (2*(250 - val));
-  
-
 }
 
 
@@ -188,43 +187,27 @@ uint16_t _SS_GetAdc(uint8_t channel){
 
 
 void SS_Print(sensing_t* ssResult){
-  HalUARTWriteString(HAL_UART_PORT_0,"\n=============================================================\n");
-  HalUARTWriteString(HAL_UART_PORT_0,"nodeId: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->nodeId, 10);
-  HalUARTWriteString(HAL_UART_PORT_0," runTime: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->runTime, 10);
-  HalUARTWriteString(HAL_UART_PORT_0," blk: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->storeBlock, 10);
-  HalUARTWriteString(HAL_UART_PORT_0," sysClk: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->sendSysClk, 10);
-  HalUARTWriteStringValue(HAL_UART_PORT_0," sqc: ", ssResult->sequence, 10);
-  
-  HalUARTWriteString(HAL_UART_PORT_0,"----------\npHAdc: ");
-  for (int i=0; i<16; i++){
-    HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->pHAdc[i], 10);
-    HalUARTWriteString(HAL_UART_PORT_0," ");
-  }
-  HalUARTWriteString(HAL_UART_PORT_0,"\nextTmpAdc : ");
-  for (int i=0; i<16; i++){
-    HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->extTmpAdc[i], 10);
-    HalUARTWriteString(HAL_UART_PORT_0," ");
+  HalUARTPrintStr(HAL_UART_PORT_0,"\n**************************\n");
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0,"nodeId: ", ssResult->nodeId, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0," runTime: ", ssResult->runTime, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0," blk: ", ssResult->storeBlock, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0," sysClk: ", ssResult->sendSysClk, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0," sqc: ", ssResult->sequence, 10);
+
+  HalUARTPrintStr(HAL_UART_PORT_0,"\n--------------------------\n");
+  for (uint8 i=0; i<16; i++){
+    HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "  pHADC[", i, 10);
+    HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "]=", ssResult->pHAdc[i], 10);
   }
 
-  HalUARTWriteString(HAL_UART_PORT_0, "vddAvg: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->vddAdcAvg, 10);
-  HalUARTWriteString(HAL_UART_PORT_0, " iTmpAvg: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->intTmpAdcAvg, 10);
-  HalUARTWriteString(HAL_UART_PORT_0, " pHAvg: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->pHAdcAvg, 10);
-  HalUARTWriteStringValue(HAL_UART_PORT_0, " eTmpAvg: ", ssResult->extTmpAdcAvg, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "\nvddAvg: " , ssResult->vddAdcAvg, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "  iTmpAvg: ", ssResult->intTmpAdcAvg, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "  pHAvg: "  , ssResult->pHAdcAvg, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "  eTmpAvg: ", ssResult->extTmpAdcAvg, 10);
 
-  HalUARTWriteString(HAL_UART_PORT_0, "vddVal: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->vddVal, 10);
-  HalUARTWriteString(HAL_UART_PORT_0, " iTmpVal: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->intTmpVal, 10);
-  HalUARTWriteString(HAL_UART_PORT_0, " pHVal: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->pHVal, 10);
-  HalUARTWriteString(HAL_UART_PORT_0, " eTmpRes: ");
-  HalUARTWriteNumber(HAL_UART_PORT_0, ssResult->extTmpRes, 10);
-  HalUARTWriteStringValue(HAL_UART_PORT_0, " eTmpVal: ", ssResult->extTmpVal, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "\nVDD: ",  ssResult->vddVal, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "  iTMP: ", ssResult->intTmpVal, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "  pH: ",   ssResult->pHVal, 10);
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "  eTmpRES: ", ssResult->extTmpRes, 10);
+  HalUARTPrintnlStrAndUInt(HAL_UART_PORT_0, "  eTMP: ", ssResult->extTmpVal, 10);
 }

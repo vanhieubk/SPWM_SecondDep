@@ -523,7 +523,6 @@ uint16 HalUARTPrintInt ( uint8 port, int32 num, uint8 radix ){
 //=================================================================
 uint16 HalUARTPrintStrAndUInt(uint8 port, char *title, uint32 value, uint8 radix){
   HalUARTPrintStr(port, title);
-  HalUARTPrintStr(port, " ");
   return HalUARTPrintUInt(port, value, radix);
 }
 
@@ -531,7 +530,6 @@ uint16 HalUARTPrintStrAndUInt(uint8 port, char *title, uint32 value, uint8 radix
 //=================================================================
 uint16 HalUARTPrintStrAndInt(uint8 port, char *title, int32 value, uint8 radix){
   HalUARTPrintStr(port, title);
-  HalUARTPrintStr(port, " ");
   return HalUARTPrintInt(port, value, radix);
 }
 

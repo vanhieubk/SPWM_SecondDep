@@ -22,7 +22,7 @@
 
 /**** DEFINE   ****/
 #define UART0_RX_BUF_SIZE        128
-#define UART0_TX_BUF_SIZE        512
+#define UART0_TX_BUF_SIZE        1028
 
 #define GW_HEADER_LENGTH         4             /* Header includes DataLength + DeviceShortAddr + Sequence */
 #define GW_ECHO_LENGTH           8             /* Echo packet */
@@ -53,6 +53,9 @@ const CODE uint8 gw_cbackSizeTable [] =
 
 
 /*****  LOCAL VARIABLEs  ********************************/
+/* Beacon payload, this is used to determine if the device is not zigbee device */
+uint8         gw_BeaconPayload[] = {0x22, 0x33, 0x44};
+uint8         gw_BeaconPayloadLen = 3;
 /* Coordinator and Device information */
 sAddrExt_t    gw_ExtAddr         = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
 uint16        gw_PanId           = NWK_PAN_ID;
@@ -76,7 +79,7 @@ uint8         gw_Data1[NWK_PACKET_LENGTH]; /* Predefined packet that will be sen
 uint8         gw_Data2[GW_ECHO_LENGTH];
 
 /* TRUE and FALSE value */
-bool          gw_MACTrue = TRUE;
+bool          gw_MACTrue  = TRUE;
 bool          gw_MACFalse = FALSE;
 
 /* flags used in the application */
@@ -110,7 +113,7 @@ uint8 GW_TaskId;
 void UART0Start(void);
 void Gateway_UARTCallBack (uint8 port, uint8 event);
 /* Setup routines */
-void GW_Startup(void);
+void GW_CoordinatorStartup(uint8 usedChannel);
 /* MAC related routines */
 void GW_AssociateRsp(macCbackEvent_t* pMsg);
 void GW_McpsDataReq(uint8* data, uint8 dataLength, bool directMsg, uint16 dstShortAddr);
@@ -130,21 +133,11 @@ void GW_Init(uint8 taskId)
   /* Initialize the task id */
   GW_TaskId = taskId;
   /* initialize MAC features */
-  MAC_InitDevice();
+  //MAC_InitDevice();
   MAC_InitCoord();
   /* Reset the MAC */
   MAC_MlmeResetReq(TRUE);
   /* Initialize the data packet */
-  for (i=GW_HEADER_LENGTH; i<NWK_PACKET_LENGTH; i++)
-  {
-    gw_Data1[i] = i-GW_HEADER_LENGTH;
-  }
-
-  /* Initialize the echo packet */
-  for (i=0; i<GW_ECHO_LENGTH; i++)
-  {
-    gw_Data2[i] = 0xEE;
-  }
 
   gw_BeaconOrder     = NWK_MAC_BEACON_ORDER;
   gw_SuperFrameOrder = NWK_MAC_SUPERFRAME_ORDER;
@@ -154,7 +147,7 @@ void GW_Init(uint8 taskId)
 
   /* Start scan */
   HalUARTPrintStr(HAL_UART_PORT_0, "Start scan\n");
-  NWK_ScanReq(MAC_SCAN_ACTIVE, 3);
+  NWK_ScanReq(MAC_SCAN_ED, GW_SCAN_DURATION);
 }
 
 /**************************************************************************************************
@@ -183,10 +176,31 @@ uint16 GW_ProcessEvent(uint8 taskId, uint16 events)
             case MAC_SCAN_ACTIVE: HalUARTPrintStr(HAL_UART_PORT_0, "Active scan\n"); break;
             case MAC_SCAN_ORPHAN: HalUARTPrintStr(HAL_UART_PORT_0, "Orphan scan\n"); break;
           }
-          /* Check if there is any Coordinator out there */
-          if (pData->scanCnf.resultListSize == 0)
-          {
-            GW_Startup();
+
+          if (pData->scanCnf.hdr.status == MAC_NO_BEACON){
+            HalUARTPrintStr(HAL_UART_PORT_0, "SCAN: no beacon\n");
+          }
+          else if (pData->scanCnf.hdr.status == MAC_INVALID_PARAMETER){
+            HalUARTPrintStr(HAL_UART_PORT_0, "SCAN: invalid\n");
+          }
+          else if (pData->scanCnf.hdr.status == MAC_SUCCESS){
+            /* find minimum */
+            uint8 minCh = 0;
+            uint8 minChEnergy = pData->scanCnf.result.pEnergyDetect[0];
+            uint8 i;
+            HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "CH[", 11, 10);
+            HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "]: ", minChEnergy, 10);
+            for (i=1; i<pData->scanCnf.resultListSize; i++){
+              HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "  CH[", i+11, 10);
+              HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "]: ", pData->scanCnf.result.pEnergyDetect[i], 10);
+              if (minChEnergy > pData->scanCnf.result.pEnergyDetect[i]){
+                minChEnergy = pData->scanCnf.result.pEnergyDetect[i];
+                minCh = i;
+              }
+            }
+            HalUARTPrintnlStrAndUInt(HAL_UART_PORT_0, "\nCOOR start on: ", (minCh+11), 10);
+            GW_CoordinatorStartup(minCh+11);
+            HalLedBlink(HAL_LED_2, 0, 50, 2000);
           }
           break;
 
@@ -206,7 +220,7 @@ uint16 GW_ProcessEvent(uint8 taskId, uint16 events)
         /* HAS one DEVICE want ASSOCIATE */
         case MAC_MLME_ASSOCIATE_IND:
           GW_AssociateRsp((macCbackEvent_t*)pMsg);
-          break;
+        break;
 
         /* Communication status INDICATION */
         case MAC_MLME_COMM_STATUS_IND:
@@ -333,12 +347,9 @@ uint8 MAC_CbackQueryRetransmit(void)
  * @param   n/a
  * @return  None
  **************************************************************************************************/
-void GW_Startup()
+void GW_CoordinatorStartup(uint8 usedChannel)
 {
   macMlmeStartReq_t   startReq;
-  /* Beacon payload, this is used to determine if the device is not zigbee device */
-  uint8         gw_BeaconPayload[] = {0x22, 0x33, 0x44};
-  uint8         gw_BeaconPayloadLen = 3;
 
   /* Setup MAC_EXTENDED_ADDRESS */
   MAC_MlmeSetReq(MAC_EXTENDED_ADDRESS, &gw_ExtAddr);
@@ -355,7 +366,7 @@ void GW_Startup()
   /* Fill in the information for the start request structure */
   startReq.startTime                = 0;
   startReq.panId                    = gw_PanId;
-  startReq.logicalChannel           = NWK_MAC_CHANNEL;
+  startReq.logicalChannel           = usedChannel;
   startReq.beaconOrder              = gw_BeaconOrder;
   startReq.superframeOrder          = gw_SuperFrameOrder;
   startReq.panCoordinator           = TRUE;
@@ -363,7 +374,6 @@ void GW_Startup()
   startReq.coordRealignment         = FALSE;
   startReq.realignSec.securityLevel = FALSE;
   startReq.beaconSec.securityLevel  = FALSE;
-
   /* Call start request to start the device as a coordinator */
   MAC_MlmeStartReq(&startReq);
 }
@@ -387,7 +397,7 @@ void GW_AssociateRsp(macCbackEvent_t* pMsg)
   /* If the number of devices are more than MAX_DEVICE_NUM, turn off the association permit */
   if (gw_NumOfDevices == GW_MAX_DEVICE_NUM){
     MAC_MlmeSetReq(MAC_ASSOCIATION_PERMIT, &gw_MACFalse);
-    HalUARTPrintStr(HAL_UART_PORT_0, "Deny asso\n");
+    HalUARTPrintStr(HAL_UART_PORT_0, "ASSOS: deny\n");
   }
   /* Fill in association respond message */
   sAddrExtCpy(gw_AssociateRsp.deviceAddress, pMsg->associateInd.deviceAddress);
@@ -396,7 +406,7 @@ void GW_AssociateRsp(macCbackEvent_t* pMsg)
   gw_AssociateRsp.sec.securityLevel  = MAC_SEC_LEVEL_NONE;
   /* Call Associate Response */
   MAC_MlmeAssociateRsp(&gw_AssociateRsp);
-  HalUARTPrintStr(HAL_UART_PORT_0, "Allow asso\n");
+  HalUARTPrintStr(HAL_UART_PORT_0, "ASSOS: allow\n");
 }
 
 
@@ -498,7 +508,7 @@ void UART0Start(){
 
   /* UART Configuration */
   uartConfig.configured           = TRUE;
-  uartConfig.baudRate             = HAL_UART_BR_9600;
+  uartConfig.baudRate             = HAL_UART_BR_38400;
   uartConfig.flowControl          = HAL_UART_FLOW_OFF;
   uartConfig.flowControlThreshold = 16;
   uartConfig.rx.maxBufSize        = UART0_RX_BUF_SIZE;
