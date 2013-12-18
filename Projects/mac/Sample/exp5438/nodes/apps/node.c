@@ -75,7 +75,7 @@ macMlmeAssociateReq_t  node_AssociateReq;
 macMlmeAssociateRsp_t  node_AssociateRsp;
 uint8   node_SuperFrameOrder  = NWK_MAC_SUPERFRAME_ORDER;
 uint8   node_BeaconOrder      = NWK_MAC_BEACON_ORDER;
-int8    node_TxPower          = 0;
+int8    node_TxPower          = 19;
 /* Task ID */
 uint8   NODE_TaskId;
 /* flags used in the application */
@@ -92,7 +92,7 @@ uint16  stickDuration  = NODE_DEFAULT_STICK_DURATION;
 uint16  preparingDelta = NODE_DEFAULT_PREPARING_DELTA;
 uint16  sensingTime    = NODE_DEFAULT_SENSING_TIME;
 uint16  sendAliveTime  = NODE_DEFAULT_SEND_ALIVE_TIME;
-uint32  curStickTime   = NODE_DEFAULT_SENSING_TIME;
+uint32  curStickTime   = 0;
 /* Sensing result */
 sensing_t ssResult;
 
@@ -108,6 +108,7 @@ void NODE_PollRequest(void);
 void NODE_SendDirect(pktType_t pktType, uint8* pktPara, uint8 paraLen, uint16 dstShortAddr);
 void NODE_SendAlive(void);
 void NODE_SendSensingResult(void);
+void NODE_PollRequest(void);
 
 /* Process event / request */
 void ProcessInitPeriEvent(void);
@@ -116,6 +117,7 @@ void ProcessStickTimerEvent(void);
 void ProcessScanFail(void);
 void ProcessStickTimerEvent(void);
 void ProcessAssocConfirmEvent(macCbackEvent_t *pData);
+void ProcessReceivingPacket(macMcpsDataInd_t* pData);
 
 /**************************************************************************************************
  * @brief       Initialize the application
@@ -125,7 +127,7 @@ void ProcessAssocConfirmEvent(macCbackEvent_t *pData);
 void NODE_Init(uint8 taskId){
   NODE_TaskId = taskId;     /* store taskId */
   MAC_InitDevice();         /* initialize MAC features */
-   MAC_InitCoord();
+  MAC_InitCoord();
   MAC_MlmeResetReq(TRUE);   /* Reset the MAC */
 
   UART0Start();             /* init UART0 for PC communication */
@@ -147,32 +149,44 @@ uint16 NODE_ProcessEvent(uint8 taskId, uint16 events)
   if (events & SYS_EVENT_MSG){
     while ((pMsg = osal_msg_receive(NODE_TaskId)) != NULL){
       switch ( *pMsg ){
-        case MAC_MLME_SCAN_CNF:
+        case MAC_MLME_SCAN_CNF: /* scan result */
           pData = (macCbackEvent_t *) pMsg;
           ProcessScanConfirmEvent(pData);
           break;
-        case MAC_MLME_ASSOCIATE_CNF:
-          pData = (macCbackEvent_t *) pMsg; /* Retrieve the message */
+        case MAC_MLME_ASSOCIATE_CNF: /* association result */
+          pData = (macCbackEvent_t *) pMsg;
           ProcessAssocConfirmEvent(pData);
           break;
-        case MAC_MCPS_DATA_CNF:/* Send COMPLETED, success or fail or overflow ... */
+        case MAC_MLME_POLL_CNF: /* poll result */
+          pData = (macCbackEvent_t *) pMsg; /* Retrieve the message */
+          switch (pData->hdr.status){
+            case MAC_SUCCESS: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: ok\n"); break;
+            case MAC_CHANNEL_ACCESS_FAILURE: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: access fail\n"); break;
+            case MAC_INVALID_PARAMETER: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: invalid\n"); break;
+            case MAC_NO_ACK: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: no ACK\n"); break;
+            case MAC_NO_DATA: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: no DATA\n"); break;
+          }
+          break;
+        case MAC_MCPS_DATA_CNF:/* Send COMPLETED */
           pData = (macCbackEvent_t *) pMsg;
           switch (pData->hdr.status){
-          case MAC_SUCCESS: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: success\n"); break;
-          case MAC_CHANNEL_ACCESS_FAILURE: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: access fail\n"); break;
-          case MAC_FRAME_TOO_LONG: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: too long\n"); break;
-          case MAC_INVALID_PARAMETER: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: invalid\n"); break;
-          case MAC_NO_ACK: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: no ACK\n"); break;
-          case MAC_TRANSACTION_EXPIRED: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: expired\n"); break;
-          case MAC_TRANSACTION_OVERFLOW: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: overflow\n"); break;
-          case MAC_COUNTER_ERROR: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: error\n"); break;
+            case MAC_SUCCESS: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: success\n"); break;
+            case MAC_CHANNEL_ACCESS_FAILURE: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: access fail\n"); break;
+            case MAC_FRAME_TOO_LONG: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: too long\n"); break;
+            case MAC_INVALID_PARAMETER: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: invalid\n"); break;
+            case MAC_NO_ACK: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: no ACK\n"); break;
+            case MAC_TRANSACTION_EXPIRED: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: expired\n"); break;
+            case MAC_TRANSACTION_OVERFLOW: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: overflow\n"); break;
+            case MAC_COUNTER_ERROR: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: error\n"); break;
           }
           mac_msg_deallocate((uint8**) &(pData->dataCnf.pDataReq));
-          HalUARTPrintStr(HAL_UART_PORT_0, "DATA: sent\n");
           break;
+        case MAC_MCPS_DATA_IND: /* receiving packet */
+          pData = (macCbackEvent_t *) pMsg;
+          ProcessReceivingPacket((macMcpsDataInd_t*) pData);
+        break;
       } /* end switch */
-      //mac_msg_deallocate((uint8 **)&pMsg);       /* Deallocate */
-      osal_msg_deallocate((uint8 *)&pMsg);
+      mac_msg_deallocate((uint8 **)&pMsg);       /* Deallocate */
     } /* end while */
     return events ^ SYS_EVENT_MSG;
   } /* end sys event */
@@ -216,7 +230,7 @@ void ProcessInitPeriEvent(void){
   SS_Init(); /* Init Sensing module */
 
   stickDuration  = NODE_DEFAULT_STICK_DURATION;
-  curStickTime   = NODE_DEFAULT_SENSING_TIME;
+  curStickTime   = 0;
   preparingDelta = NODE_DEFAULT_PREPARING_DELTA;
   sensingTime    = NODE_DEFAULT_SENSING_TIME;
   /* Start sensing timer */
@@ -336,14 +350,24 @@ void ProcessStickTimerEvent(){
     }
     if (0 == (curStickTime % sendAliveTime)){
       if (isAssociated){
-        NODE_SendAlive();
         HalUARTPrintStr(HAL_UART_PORT_0, "SEND: alive\n");
+        NODE_SendAlive();
+        HalUARTPrintStr(HAL_UART_PORT_0, "POLL: request\n");
+        NODE_PollRequest();
       }
       else{
         HalUARTPrintStr(HAL_UART_PORT_0, "PEND: alive\n");
       }
     }
   }
+}
+
+
+
+/************************************/
+void ProcessReceivingPacket(macMcpsDataInd_t* pData){
+  HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "POLL: linkQuality: ", pData->mac.mpduLinkQuality,10);
+  HalUARTPrintnlStrAndInt(HAL_UART_PORT_0, " rssi: ", pData->mac.rssi, 10);
 }
 /**************************************************************************************************
  * @brief   Update the timer per tick
@@ -416,11 +440,7 @@ void NODE_SendSensingResult(void){
   NODE_SendDirect(PKT_SENSING_TYPE, (uint8*) &ssResult, sizeof(ssResult), node_CoordShortAddr);
 }
 
-/**************************************************************************************************
- * @brief   Performs a poll request on the coordinator
- * @param   None
- * @return  None
- **************************************************************************************************/
+
 void NODE_PollRequest(void)
 {
   macMlmePollReq_t  pollReq;

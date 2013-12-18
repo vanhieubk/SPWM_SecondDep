@@ -20,7 +20,7 @@ extern "C"
   #define NODE_DEFAULT_NUM_RESCAN_TRY   3
   #define NODE_DEFAULT_STICK_DURATION   1000
   #define NODE_DEFAULT_PREPARING_DELTA  5
-  #define NODE_DEFAULT_SENSING_TIME     10
+  #define NODE_DEFAULT_SENSING_TIME     2000
   #define NODE_DEFAULT_SEND_ALIVE_TIME  2 /* send alive time, must < sensing time */
 #else
   #define NODE_DEFAULT_SCAN_TIME_OUT    4

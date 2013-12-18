@@ -90,9 +90,7 @@ const CODE uint8 msa_cbackSizeTable [] =
   Extended address of the device, for coordinator, it will be msa_ExtAddr1
   For any device, it will be msa_ExtAddr2 with the last 2 bytes from a ADC read
 */
-sAddrExt_t    msa_ExtAddr;
-sAddrExt_t    msa_ExtAddr1 = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
-sAddrExt_t    msa_ExtAddr2 = {0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0, 0x00, 0x00};
+sAddrExt_t    msa_ExtAddr = {0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0, 0x00, 0x00};
 
 /* Coordinator and Device information */
 uint16        msa_PanId = MSA_PAN_ID;
@@ -269,7 +267,6 @@ uint8 msa_keyIndex      = 0;
  *                                     Local Function Prototypes
  **************************************************************************************************/
 /* Setup routines */
-void MSA_CoordinatorStartup(void);
 void MSA_DeviceStartup(void);
 
 /* MAC related routines */
@@ -524,11 +521,7 @@ uint16 MSA_ProcessEvent(uint8 taskId, uint16 events)
           pData = (macCbackEvent_t *) pMsg;
 
           /* If there is no other on the channel or no other with sampleBeacon start as coordinator */
-          if (((pData->scanCnf.resultListSize == 0) && (pData->scanCnf.hdr.status == MAC_NO_BEACON)) || (!msa_IsSampleBeacon))
-          {
-            MSA_CoordinatorStartup();
-          }
-          else if ((msa_IsSampleBeacon) && pData->scanCnf.hdr.status == MAC_SUCCESS)
+          if ((msa_IsSampleBeacon) && pData->scanCnf.hdr.status == MAC_SUCCESS)
           {
             /* Start the devive up as beacon enabled or not */
             MSA_DeviceStartup();
@@ -682,21 +675,6 @@ void MAC_CbackEvent(macCbackEvent_t *pData)
 
   switch (pData->hdr.event)
   {
-      case MAC_MLME_BEACON_NOTIFY_IND:
-
-      len += sizeof(macPanDesc_t) + pData->beaconNotifyInd.sduLength +
-             MAC_PEND_FIELDS_LEN(pData->beaconNotifyInd.pendAddrSpec);
-      if ((pMsg = (macCbackEvent_t *) osal_msg_allocate(len)) != NULL)
-      {
-        /* Copy data over and pass them up */
-        osal_memcpy(pMsg, pData, sizeof(macMlmeBeaconNotifyInd_t));
-        pMsg->beaconNotifyInd.pPanDesc = (macPanDesc_t *) ((uint8 *) pMsg + sizeof(macMlmeBeaconNotifyInd_t));
-        osal_memcpy(pMsg->beaconNotifyInd.pPanDesc, pData->beaconNotifyInd.pPanDesc, sizeof(macPanDesc_t));
-        pMsg->beaconNotifyInd.pSdu = (uint8 *) (pMsg->beaconNotifyInd.pPanDesc + 1);
-        osal_memcpy(pMsg->beaconNotifyInd.pSdu, pData->beaconNotifyInd.pSdu, pData->beaconNotifyInd.sduLength);
-      }
-      break;
-
     case MAC_MCPS_DATA_IND:
       pMsg = pData;
       break;
@@ -759,63 +737,6 @@ uint8 MAC_CbackQueryRetransmit(void)
   return(0);
 }
 
-/**************************************************************************************************
- *
- * @fn      MSA_CoordinatorStartup()
- *
- * @brief   Update the timer per tick
- *
- * @param   n/a
- *
- * @return  None
- *
- **************************************************************************************************/
-void MSA_CoordinatorStartup()
-{
-  macMlmeStartReq_t   startReq;
-
-  /* Setup MAC_EXTENDED_ADDRESS */
-  sAddrExtCpy(msa_ExtAddr, msa_ExtAddr1);
-  MAC_MlmeSetReq(MAC_EXTENDED_ADDRESS, &msa_ExtAddr);
-
-  /* Setup MAC_SHORT_ADDRESS */
-  MAC_MlmeSetReq(MAC_SHORT_ADDRESS, &msa_CoordShortAddr);
-
-  /* Setup MAC_BEACON_PAYLOAD_LENGTH */
-  MAC_MlmeSetReq(MAC_BEACON_PAYLOAD_LENGTH, &msa_BeaconPayloadLen);
-
-  /* Setup MAC_BEACON_PAYLOAD */
-  MAC_MlmeSetReq(MAC_BEACON_PAYLOAD, &msa_BeaconPayload);
-
-  /* Enable RX */
-  MAC_MlmeSetReq(MAC_RX_ON_WHEN_IDLE, &msa_MACTrue);
-
-  /* Setup MAC_ASSOCIATION_PERMIT */
-  MAC_MlmeSetReq(MAC_ASSOCIATION_PERMIT, &msa_MACTrue);
-
-  /* Fill in the information for the start request structure */
-  startReq.startTime = 0;
-  startReq.panId = msa_PanId;
-  startReq.logicalChannel = MSA_MAC_CHANNEL;
-  startReq.beaconOrder = msa_BeaconOrder;
-  startReq.superframeOrder = msa_SuperFrameOrder;
-  startReq.panCoordinator = TRUE;
-  startReq.batteryLifeExt = FALSE;
-  startReq.coordRealignment = FALSE;
-  startReq.realignSec.securityLevel = FALSE;
-  startReq.beaconSec.securityLevel = FALSE;
-
-  /* Call start request to start the device as a coordinator */
-  MAC_MlmeStartReq(&startReq);
-
-  /* Allow Beacon mode coordinator to sleep */
-  if (msa_BeaconOrder != 15)
-  {
-    /* Power saving */
-    MSA_PowerMgr (MSA_PWR_MGMT_ENABLED);
-  }
-
-}
 
 /**************************************************************************************************
  *
@@ -832,65 +753,23 @@ void MSA_DeviceStartup()
 {
   uint16 AtoD = 0;
 
-#if (defined HAL_ADC) && (HAL_ADC == TRUE)
-  AtoD = HalAdcRead (MSA_HAL_ADC_CHANNEL, MSA_HAL_ADC_RESOLUTION);
-#else
   AtoD = MAC_RADIO_RANDOM_WORD();
-#endif
+  msa_ExtAddr[6] = HI_UINT16( AtoD );
+  msa_ExtAddr[7] = LO_UINT16( AtoD );
 
-  /*
-    Setup MAC_EXTENDED_ADDRESS
-  */
-#if defined (HAL_BOARD_CC2420DB) || defined (HAL_BOARD_DZ1611) || defined (HAL_BOARD_DZ1612) || \
-    defined (HAL_BOARD_DRFG4618) || defined (HAL_BOARD_F2618)
-  /* Use HI and LO of AtoD on CC2420 and MSP430 */
-  msa_ExtAddr2[6] = HI_UINT16( AtoD );
-  msa_ExtAddr2[7] = LO_UINT16( AtoD );
-#else
-  /* On CC2430 and CC2530 use current MAC timer */
-  AtoD = macMcuPrecisionCount();
-  msa_ExtAddr2[6] = HI_UINT16( AtoD );
-  msa_ExtAddr2[7] = LO_UINT16( AtoD );
-#endif
-
-  sAddrExtCpy(msa_ExtAddr, msa_ExtAddr2);
   MAC_MlmeSetReq(MAC_EXTENDED_ADDRESS, &msa_ExtAddr);
-
   /* Setup MAC_BEACON_PAYLOAD_LENGTH */
   MAC_MlmeSetReq(MAC_BEACON_PAYLOAD_LENGTH, &msa_BeaconPayloadLen);
-
   /* Setup MAC_BEACON_PAYLOAD */
   MAC_MlmeSetReq(MAC_BEACON_PAYLOAD, &msa_BeaconPayload);
-
   /* Setup PAN ID */
   MAC_MlmeSetReq(MAC_PAN_ID, &msa_PanId);
-
-  /* This device is setup for Direct Message */
-  if (msa_IsDirectMsg)
-    MAC_MlmeSetReq(MAC_RX_ON_WHEN_IDLE, &msa_MACTrue);
-  else
-    MAC_MlmeSetReq(MAC_RX_ON_WHEN_IDLE, &msa_MACFalse);
-
+  /* This device is setup for inDirect Message */
+  MAC_MlmeSetReq(MAC_RX_ON_WHEN_IDLE, &msa_MACFalse);
   /* Setup Coordinator short address */
   MAC_MlmeSetReq(MAC_COORD_SHORT_ADDRESS, &msa_AssociateReq.coordAddress.addr.shortAddr);
-
-#ifdef FEATURE_MAC_SECURITY
-  /* Setup Coordinator short address for security */
-  MAC_MlmeSetSecurityReq(MAC_PAN_COORD_SHORT_ADDRESS, &msa_AssociateReq.coordAddress.addr.shortAddr);
-#endif /* FEATURE_MAC_SECURITY */
-
-  if (msa_BeaconOrder != 15)
-  {
-    /* Setup Beacon Order */
-    MAC_MlmeSetReq(MAC_BEACON_ORDER, &msa_BeaconOrder);
-
-    /* Setup Super Frame Order */
-    MAC_MlmeSetReq(MAC_SUPERFRAME_ORDER, &msa_SuperFrameOrder);
-  }
-
   /* Power saving */
   MSA_PowerMgr (MSA_PWR_MGMT_ENABLED);
-
 }
 
 /**************************************************************************************************
