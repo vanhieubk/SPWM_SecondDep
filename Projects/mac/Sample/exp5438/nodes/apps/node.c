@@ -1,10 +1,3 @@
-#ifdef FEATURE_MAC_SECURITY
-  #include "mac_spec.h"
-
-  /* MAC Sceurity */
-  #include "mac_security_pib.h"
-  #include "mac_security.h"
-#endif /* FEATURE_MAC_SECURITY */
 /* Hal Driver includes */
 #include "hal_types.h"
 #include "hal_key.h"
@@ -70,8 +63,6 @@ uint16        node_PanId          = NWK_PAN_ID;
 uint16        node_CoordShortAddr = NWK_GW_SHORT_ADDR;
 uint16        node_DevShortAddr   = NODE_DEV_SHORT_ADDR;
 
-uint8         sensingDataPkt[];
-uint8         alivePkt[];
 /* TRUE and FALSE value */
 bool          node_MACTrue  = TRUE;
 bool          node_MACFalse = FALSE;
@@ -84,6 +75,7 @@ macMlmeAssociateReq_t  node_AssociateReq;
 macMlmeAssociateRsp_t  node_AssociateRsp;
 uint8   node_SuperFrameOrder  = NWK_MAC_SUPERFRAME_ORDER;
 uint8   node_BeaconOrder      = NWK_MAC_BEACON_ORDER;
+int8    node_TxPower          = 0;
 /* Task ID */
 uint8   NODE_TaskId;
 /* flags used in the application */
@@ -103,19 +95,21 @@ uint16  sendAliveTime  = NODE_DEFAULT_SEND_ALIVE_TIME;
 uint32  curStickTime   = NODE_DEFAULT_SENSING_TIME;
 /* Sensing result */
 sensing_t ssResult;
-/**************************************************************************************************
- *                                     Local Function Prototypes
- **************************************************************************************************/
+
+/* Packet handle */
+macMcpsDataReq_t*  sentMACPkt    = NULL;
+uint8              msduHandle    = 0;
+
+/**** FUNCTIONs ****/
 void UART0Start(void);
 void NODE_UARTCallBack (uint8 port, uint8 event);
 
 void NODE_DeviceStartup(void);
 /* MAC related routines */
-void NODE_AssociateReq(void);
 void NODE_PollRequest(void);
 
 /* Support */
-void NODE_SendDirect(uint8 pktType, uint8* pktData, uint8 dataLen, uint16 dstShortAddr);
+void NODE_SendDirect(pktType_t pktType, uint8* pktPara, uint8 paraLen, uint16 dstShortAddr);
 void NODE_SendAlive(void);
 void NODE_SendSensingResult(void);
 
@@ -135,11 +129,13 @@ void ProcessAssocConfirmEvent(macCbackEvent_t *pData);
 void NODE_Init(uint8 taskId){
   NODE_TaskId = taskId;     /* store taskId */
   MAC_InitDevice();         /* initialize MAC features */
+   MAC_InitCoord();
   MAC_MlmeResetReq(TRUE);   /* Reset the MAC */
 
   UART0Start();             /* init UART0 for PC communication */
   osal_start_timerEx(NODE_TaskId, NODE_PREP_INIT_EVENT, 1000); /* delay 1s after power up */
 }
+
 
 /**************************************************************************************************
  * @brief       This routine handles events
@@ -165,11 +161,23 @@ uint16 NODE_ProcessEvent(uint8 taskId, uint16 events)
           break;
         case MAC_MCPS_DATA_CNF:/* Send COMPLETED, success or fail or overflow ... */
           pData = (macCbackEvent_t *) pMsg;
-          mac_msg_deallocate((uint8**)&pData->dataCnf.pDataReq);
+          switch (pData->hdr.status){
+          case MAC_SUCCESS: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: success\n"); break;
+          case MAC_CHANNEL_ACCESS_FAILURE: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: access fail\n"); break;
+          case MAC_FRAME_TOO_LONG: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: too long\n"); break;
+          case MAC_INVALID_PARAMETER: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: invalid\n"); break;
+          case MAC_NO_ACK: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: no ACK\n"); break;
+          case MAC_TRANSACTION_EXPIRED: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: expired\n"); break;
+          case MAC_TRANSACTION_OVERFLOW: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: overflow\n"); break;
+          case MAC_COUNTER_ERROR: HalUARTPrintStr(HAL_UART_PORT_0, "SENT: error\n"); break;
+          }
+          mac_msg_deallocate((uint8 **) &sentMACPkt);
+          //mac_msg_deallocate((uint8**) &(pData->dataCnf.pDataReq));
           HalUARTPrintStr(HAL_UART_PORT_0, "DATA: sent\n");
           break;
       } /* end switch */
-      mac_msg_deallocate((uint8 **)&pMsg);       /* Deallocate */
+      //mac_msg_deallocate((uint8 **)&pMsg);       /* Deallocate */
+      osal_msg_deallocate((uint8 *)&pMsg);
     } /* end while */
     return events ^ SYS_EVENT_MSG;
   } /* end sys event */
@@ -207,8 +215,8 @@ void ProcessInitPeriEvent(void){
   }
 
   /* Start scan */
-  NWK_ScanReq(MAC_SCAN_ACTIVE, scanTimeOut);
   HalUARTPrintStr(HAL_UART_PORT_0, "SCAN: start\n");
+  NWK_ScanReq(MAC_SCAN_ACTIVE, scanTimeOut);
 
   SS_Init(); /* Init Sensing module */
 
@@ -257,7 +265,7 @@ void ProcessScanConfirmEvent(macCbackEvent_t* pData){
     numResult = scanCnf->resultListSize;
     HalUARTPrintnlStrAndUInt(HAL_UART_PORT_0, "SCAN result: ", numResult, 10);
     for (i=0; i<numResult; i++){
-      HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "coor: ", scanResult.panDesc[i].coordPanId, 16);
+      HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "COOR: ", scanResult.panDesc[i].coordPanId, 16);
       HalUARTPrintnlStrAndUInt(HAL_UART_PORT_0, "  channel: ", scanResult.panDesc[i].logicalChannel, 10);
 
       if (NWK_PAN_ID == scanResult.panDesc[i].coordPanId){
@@ -268,12 +276,12 @@ void ProcessScanConfirmEvent(macCbackEvent_t* pData){
         node_AssociateReq.coordAddress.addr.shortAddr = scanResult.panDesc[i].coordAddress.addr.shortAddr;
         node_AssociateReq.coordPanId            = NWK_PAN_ID;
         node_AssociateReq.capabilityInformation = MAC_CAPABLE_ALLOC_ADDR;
-        node_AssociateReq.sec.securityLevel = MAC_SEC_LEVEL_NONE;
+        node_AssociateReq.sec.securityLevel     = MAC_SEC_LEVEL_NONE;
 
         /* MUST after setting node_AssosciateReq */
         NODE_DeviceStartup(); /* Start the devive up */
-        NODE_AssociateReq();  /* Call Associate Req */
         HalUARTPrintStr(HAL_UART_PORT_0, "ASSOC: request\n");
+        MAC_MlmeAssociateReq(&node_AssociateReq);  /* Call Associate Req */
       }
     }
     if (FALSE == isGWDetect){ /* not DETECT GateWay */
@@ -294,6 +302,7 @@ void ProcessAssocConfirmEvent(macCbackEvent_t *pData){
     node_DevShortAddr = pData->associateCnf.assocShortAddress; /* Retrieve MAC_SHORT_ADDRESS */
     MAC_MlmeSetReq(MAC_SHORT_ADDRESS, &node_DevShortAddr); /* Setup MAC_SHORT_ADDRESS - obtained from Association */
     HalUARTPrintStr(HAL_UART_PORT_0, "ASSOC: OK\n");
+    HalUARTPrintnlStrAndUInt(HAL_UART_PORT_0, "ADDRESS: ", node_DevShortAddr, 16);
     if (isPendData){
       NODE_SendSensingResult();
       isPendData = FALSE;
@@ -364,66 +373,52 @@ void NODE_DeviceStartup()
   MAC_MlmeSetReq(MAC_PAN_ID, &node_PanId);
   /* This device is setup for Direct Message */
   MAC_MlmeSetReq(MAC_RX_ON_WHEN_IDLE, &node_MACFalse);
+  MAC_MlmeSetReq(MAC_SECURITY_ENABLED, &node_MACFalse);
+  MAC_MlmeSetReq(MAC_PHY_TRANSMIT_POWER_SIGNED, &node_TxPower);
   /* Setup Coordinator short address */
   MAC_MlmeSetReq(MAC_COORD_SHORT_ADDRESS, &node_AssociateReq.coordAddress.addr.shortAddr);
+  node_CoordShortAddr = node_AssociateReq.coordAddress.addr.shortAddr;
+  HalUARTPrintnlStrAndUInt(HAL_UART_PORT_0, "COOR: addr ", node_CoordShortAddr, 16);
   /* Power saving */
   NODE_PowerMgr (NODE_PWR_MGMT_ENABLED);
 }
 
-/**************************************************************************************************
- * @brief   Perform associate request
- * @param   None
- * @return  None
- **************************************************************************************************/
-void NODE_AssociateReq(void){
-  MAC_MlmeAssociateReq(&node_AssociateReq);
+
+void NODE_SendDirect(pktType_t pktType, uint8* pktPara, uint8 paraLen, uint16 dstShortAddr){
+  //if (NULL != sentMACPkt) {return;}
+  sentMACPkt = MAC_McpsDataAlloc(sizeof(pktType_t)+paraLen, MAC_SEC_LEVEL_NONE, MAC_KEY_ID_MODE_IMPLICIT );
+  //sentMACPkt = MAC_McpsDataAlloc(20, MAC_SEC_LEVEL_NONE, MAC_KEY_ID_MODE_NONE );
+
+  if ((NULL == sentMACPkt)){
+    HalUARTPrintStr(HAL_UART_PORT_0, "MEM: deny\n");
+    return;
+  }
+
+  sentMACPkt->mac.srcAddrMode            = SADDR_MODE_SHORT;
+  sentMACPkt->mac.dstAddr.addrMode       = SADDR_MODE_SHORT;
+  sentMACPkt->mac.dstAddr.addr.shortAddr = dstShortAddr;
+  sentMACPkt->mac.dstPanId               = node_PanId;
+  sentMACPkt->mac.txOptions              = MAC_TXOPTION_NO_RETRANS;
+  sentMACPkt->mac.channel                = 11;
+  sentMACPkt->mac.power                  = 0;
+  sentMACPkt->sec.securityLevel          = MAC_SEC_LEVEL_NONE;
+  sentMACPkt->sec.keyIdMode              = MAC_KEY_ID_MODE_NONE;
+  sentMACPkt->mac.msduHandle = msduHandle++;
+
+  sentMACPkt->msdu.len = sizeof(pktType_t)+paraLen;
+  //dstAppPkt = (pkt_t*) sentMACPkt->msdu.p;
+  //dstAppPkt->pktType = pktType;
+  //osal_memcpy(&(dstAppPkt->pktPara), pktPara, paraLen);
+  MAC_McpsDataReq(sentMACPkt);
 }
 
-
 void NODE_SendAlive(void){
-  NODE_SendDirect(PKT_ALIVE_TYPE, (uint8 *) &curStickTime, 20, node_CoordShortAddr);
+  NODE_SendDirect(PKT_ALIVE_TYPE, (uint8*) &curStickTime, sizeof(curStickTime), node_CoordShortAddr);
 }
 
 
 void NODE_SendSensingResult(void){
-  NODE_SendDirect(PKT_SENSING_DATA_TYPE, (uint8*) &ssResult, sizeof(ssResult), node_CoordShortAddr);
-}
-
-
-/**************************************************************************************************
- * @brief   This routine calls the Data Request
- * @param   data       - contains the data that would be sent
- *          dataLength - length of the data that will be sent
- * @return  None
- **************************************************************************************************/
-uint8 securityLevel = MAC_SEC_LEVEL_NONE;
-uint8 keyIdMode = MAC_KEY_ID_MODE_IMPLICIT;
-void NODE_SendDirect(uint8 pktType, uint8* pktData, uint8 dataLen, uint16 dstShortAddr){
-  macMcpsDataReq_t  *pData;
-  static uint8      handle = 0;
-  uint8* dstBuf, i;
-
-  //pData = MAC_McpsDataAlloc(dataLen+sizeof(pktType), securityLevel, keyIdMode );
-  if (pData != NULL)  {
-    pData->mac.srcAddrMode            = SADDR_MODE_SHORT;
-    pData->mac.dstAddr.addrMode       = SADDR_MODE_SHORT;
-    pData->mac.dstAddr.addr.shortAddr = dstShortAddr;
-    pData->mac.dstPanId               = node_PanId;
-    pData->mac.msduHandle             = handle++;
-    pData->mac.txOptions              = MAC_TXOPTION_NO_RETRANS;
-
-    //pData->msdu.len = dataLen+sizeof(pktType);
-    pData->sec.securityLevel = MAC_SEC_LEVEL_NONE;     /* MAC security parameters */
-    /* Copy data */
-    dstBuf  = pData->msdu.p;
-    *dstBuf = pktType;
-    dstBuf++;
-    for (i=0; i<dataLen; i++){
-      *dstBuf = pktData[i];
-      dstBuf++;
-    }
-    //MAC_McpsDataReq(pData);
-  }
+  NODE_SendDirect(PKT_SENSING_TYPE, (uint8*) &ssResult, sizeof(ssResult), node_CoordShortAddr);
 }
 
 /**************************************************************************************************
@@ -493,4 +488,61 @@ void UART0Start(){
 void NODE_UARTCallBack (uint8 port, uint8 event)
 {
     //do nothing now
+}
+
+
+/**
+ * @brief       This callback function sends MAC events to the application.
+ *              The application must implement this function.  A typical
+ *              implementation of this function would allocate an OSAL message,
+ *              copy the event parameters to the message, and send the message
+ *              to the application's OSAL event handler.  This function may be
+ *              executed from task or interrupt context and therefore must
+ *              be reentrant.
+ * @return      None.
+ */
+void MAC_CbackEvent(macCbackEvent_t *pData)
+{
+  macCbackEvent_t *pMsg = NULL;
+
+  uint8 len = node_cbackSizeTable[pData->hdr.event];
+  switch (pData->hdr.event)
+  {
+    case MAC_MCPS_DATA_IND:
+      pMsg = pData;
+      break;
+    default:
+      if ((pMsg = (macCbackEvent_t *) osal_msg_allocate(len)) != NULL) {
+        osal_memcpy(pMsg, pData, len);
+      }
+      break;
+  }
+  if (pMsg != NULL) {
+    osal_msg_send(NODE_TaskId, (uint8 *) pMsg);
+  }
+}
+
+/**
+ * @brief   Returns the number of indirect messages pending in the application
+ * @return  Number of indirect messages in the application
+ */
+uint8 MAC_CbackCheckPending(void)
+{
+  return (0);
+}
+
+/**
+ * @brief       This function callback function returns whether or not to continue MAC
+ *              retransmission.
+ *              A return value '0x00' will indicate no continuation of retry and a return value
+ *              '0x01' will indicate to continue retransmission. This callback function shall be
+ *              used to stop continuing retransmission for RF4CE.
+ *              MAC shall call this callback function whenever it finishes transmitting a packet
+ *              for macMaxFrameRetries times.
+ * @return      0x00 to stop retransmission, 0x01 to continue retransmission.
+*/
+uint8 MAC_CbackQueryRetransmit(void)
+{
+  /* Stub */
+  return(0);
 }
