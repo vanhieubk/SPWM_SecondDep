@@ -1,67 +1,3 @@
-/**************************************************************************************************
-  Filename:       msa.c
-  Revised:        $Date: 2013-02-25 14:58:47 -0800 (Mon, 25 Feb 2013) $
-  Revision:       $Revision: 33292 $
-
-  Description:    This file contains the sample application that can be use to test
-                  the functionality of the MAC, HAL and low level.
-
-
-  Copyright 2006-2013 Texas Instruments Incorporated. All rights reserved.
-
-  IMPORTANT: Your use of this Software is limited to those specific rights
-  granted under the terms of a software license agreement between the user
-  who downloaded the software, his/her employer (which must be your employer)
-  and Texas Instruments Incorporated (the "License").  You may not use this
-  Software unless you agree to abide by the terms of the License. The License
-  limits your use, and you acknowledge, that the Software may not be modified,
-  copied or distributed unless embedded on a Texas Instruments microcontroller
-  or used solely and exclusively in conjunction with a Texas Instruments radio
-  frequency transceiver, which is integrated into your product.  Other than for
-  the foregoing purpose, you may not use, reproduce, copy, prepare derivative
-  works of, modify, distribute, perform, display or sell this Software and/or
-  its documentation for any purpose.
-
-  YOU FURTHER ACKNOWLEDGE AND AGREE THAT THE SOFTWARE AND DOCUMENTATION ARE
-  PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
-  INCLUDING WITHOUT LIMITATION, ANY WARRANTY OF MERCHANTABILITY, TITLE,
-  NON-INFRINGEMENT AND FITNESS FOR A PARTICULAR PURPOSE. IN NO EVENT SHALL
-  TEXAS INSTRUMENTS OR ITS LICENSORS BE LIABLE OR OBLIGATED UNDER CONTRACT,
-  NEGLIGENCE, STRICT LIABILITY, CONTRIBUTION, BREACH OF WARRANTY, OR OTHER
-  LEGAL EQUITABLE THEORY ANY DIRECT OR INDIRECT DAMAGES OR EXPENSES
-  INCLUDING BUT NOT LIMITED TO ANY INCIDENTAL, SPECIAL, INDIRECT, PUNITIVE
-  OR CONSEQUENTIAL DAMAGES, LOST PROFITS OR LOST DATA, COST OF PROCUREMENT
-  OF SUBSTITUTE GOODS, TECHNOLOGY, SERVICES, OR ANY CLAIMS BY THIRD PARTIES
-  (INCLUDING BUT NOT LIMITED TO ANY DEFENSE THEREOF), OR OTHER SIMILAR COSTS.
-
-  Should you have any questions regarding your right to use this Software,
-  contact Texas Instruments Incorporated at www.TI.com.
-**************************************************************************************************/
-
-/**************************************************************************************************
-
-    Description:
-
-                                KEY UP (or S1)
-                              - Non Beacon
-                              - First board in the network will be setup as the coordinator
-                              - Any board after the first one will be setup as the device
-                                 |
-          KEY LEFT               |      KEY RIGHT(or S2)
-                             ----+----- - Start transmitting
-                                 |
-                                 |
-                                KEY DOWN
-
-
-
-**************************************************************************************************/
-
-
-/**************************************************************************************************
- *                                           Includes
- **************************************************************************************************/
-
 /* Hal Driver includes */
 #include "hal_types.h"
 #include "hal_key.h"
@@ -338,15 +274,12 @@ void MSA_DeviceStartup(void);
 
 /* MAC related routines */
 void MSA_AssociateReq(void);
-void MSA_AssociateRsp(macCbackEvent_t* pMsg);
 void MSA_McpsDataReq(uint8* data, uint8 dataLength, bool directMsg, uint16 dstShortAddr);
 void MSA_McpsPollReq(void);
 void MSA_ScanReq(uint8 scanType, uint8 scanDuration);
-void MSA_SyncReq(void);
 
-/* Support */
-bool MSA_BeaconPayLoadCheck(uint8* pSdu);
-bool MSA_DataCheck(uint8* data, uint8 dataLength);
+
+
 
 
 #ifdef FEATURE_MAC_SECURITY
@@ -507,10 +440,6 @@ uint16 MSA_ProcessEvent(uint8 taskId, uint16 events)
     {
       switch ( *pMsg )
       {
-        case MAC_MLME_ASSOCIATE_IND:
-          MSA_AssociateRsp((macCbackEvent_t*)pMsg);
-          break;
-
         case MAC_MLME_ASSOCIATE_CNF:
           /* Retrieve the message */
           pData = (macCbackEvent_t *) pMsg;
@@ -555,7 +484,7 @@ uint16 MSA_ProcessEvent(uint8 taskId, uint16 events)
           /* Check for correct beacon payload */
           if (!msa_IsStarted)
           {
-            msa_IsSampleBeacon = MSA_BeaconPayLoadCheck(pData->beaconNotifyInd.pSdu);
+
 
             /* If it's the correct beacon payload, retrieve the data for association req */
             if (msa_IsSampleBeacon)
@@ -626,7 +555,7 @@ uint16 MSA_ProcessEvent(uint8 taskId, uint16 events)
         case MAC_MCPS_DATA_IND:
           pData = (macCbackEvent_t*)pMsg;
 
-          if (MSA_DataCheck ( pData->dataInd.msdu.p, pData->dataInd.msdu.len ))
+
           {
             HalLedSet (HAL_LED_3, HAL_LED_MODE_TOGGLE);
 
@@ -957,9 +886,6 @@ void MSA_DeviceStartup()
 
     /* Setup Super Frame Order */
     MAC_MlmeSetReq(MAC_SUPERFRAME_ORDER, &msa_SuperFrameOrder);
-
-    /* Sync request */
-    MSA_SyncReq();
   }
 
   /* Power saving */
@@ -983,51 +909,6 @@ void MSA_AssociateReq(void)
   MAC_MlmeAssociateReq(&msa_AssociateReq);
 }
 
-/**************************************************************************************************
- *
- * @fn      MSA_AssociateRsp()
- *
- * @brief   This routine is called by Associate_Ind inorder to return the response to the device
- *
- * @param   pMsg - pointer to the structure recieved by MAC_MLME_ASSOCIATE_IND
- *
- * @return  None
- *
- **************************************************************************************************/
-void MSA_AssociateRsp(macCbackEvent_t* pMsg)
-{
-  /* Assign the short address  for the Device, from pool */
-  uint16 assocShortAddress = msa_DevShortAddrList[msa_NumOfDevices];
-
-#ifdef FEATURE_MAC_SECURITY
-  uint16 panID;
-
-  /* Add device to device table for security */
-  MAC_MlmeGetReq(MAC_PAN_ID, &panID);
-  MSA_SecuredDeviceTableUpdate(panID, assocShortAddress,
-                               pMsg->associateInd.deviceAddress,
-                               &msa_NumOfSecuredDevices);
-#endif /* FEATURE_MAC_SECURITY */
-
-  /* Build the record for this device */
-  msa_DeviceRecord[msa_NumOfDevices].devShortAddr = msa_DevShortAddrList[msa_NumOfDevices];
-  msa_DeviceRecord[msa_NumOfDevices].isDirectMsg = pMsg->associateInd.capabilityInformation & MAC_CAPABLE_RX_ON_IDLE;
-  msa_NumOfDevices++;
-
-  /* If the number of devices are more than MAX_DEVICE_NUM, turn off the association permit */
-  if (msa_NumOfDevices == MSA_MAX_DEVICE_NUM)
-    MAC_MlmeSetReq(MAC_ASSOCIATION_PERMIT, &msa_MACFalse);
-
-  /* Fill in association respond message */
-  sAddrExtCpy(msa_AssociateRsp.deviceAddress, pMsg->associateInd.deviceAddress);
-  msa_AssociateRsp.assocShortAddress = assocShortAddress;
-  msa_AssociateRsp.status = MAC_SUCCESS;
-
-  msa_AssociateRsp.sec.securityLevel = MAC_SEC_LEVEL_NONE;
-
-  /* Call Associate Response */
-  MAC_MlmeAssociateRsp(&msa_AssociateRsp);
-}
 
 /**************************************************************************************************
  *
@@ -1134,173 +1015,12 @@ void MSA_ScanReq(uint8 scanType, uint8 scanDuration)
   MAC_MlmeScanReq(&scanReq);
 }
 
-/**************************************************************************************************
- *
- * @fn      MSA_SyncReq()
- *
- * @brief   Sync Request
- *
- * @param   None
- *
- * @return  None
- *
- **************************************************************************************************/
-void MSA_SyncReq(void)
-{
-  macMlmeSyncReq_t syncReq;
 
-  /* Fill in information for sync request structure */
-  syncReq.logicalChannel = MSA_MAC_CHANNEL;
-  syncReq.channelPage    = MAC_CHANNEL_PAGE_0;
-  syncReq.trackBeacon    = TRUE;
 
-  /* Call sync request */
-  MAC_MlmeSyncReq(&syncReq);
-}
 
-/**************************************************************************************************
- *
- * @fn      MSA_BeaconPayLoadCheck()
- *
- * @brief   Check if the beacon comes from MSA but not zigbee
- *
- * @param   pSdu - pointer to the buffer that contains the data
- *
- * @return  TRUE or FALSE
- *
- **************************************************************************************************/
-bool MSA_BeaconPayLoadCheck(uint8* pSdu)
-{
-  uint8 i = 0;
-  for (i=0; i<msa_BeaconPayloadLen; i++)
-  {
-    if (pSdu[i] != msa_BeaconPayload[i])
-    {
-      return FALSE;
-    }
+void MSA_HandleKeys(uint8 keys, uint8 shift){
+  if ( keys & HAL_KEY_SW_1 ){
   }
-
-  return TRUE;
-}
-
-/**************************************************************************************************
- *
- * @fn      MSA_DataCheck()
- *
- * @brief   Check if the data match with the predefined data
- *
- * @param    data - pointer to the buffer where the data will be checked against the predefined data
- *           dataLength - length of the data
- *
- * @return  TRUE if the data matched else it's the response / echo packet
- *
- **************************************************************************************************/
-bool MSA_DataCheck(uint8* data, uint8 dataLength)
-{
-  uint8 i = 0;
-
-  if (data[0] == dataLength)
-  {
-    for (i=MSA_HEADER_LENGTH; i<(data[0] - 1); i++)
-    {
-       if (data[i] != msa_Data1[i])
-         return FALSE;
-    }
-  }
-  else
-  {
-    return FALSE;
-  }
-  return TRUE;
-}
-
-/**************************************************************************************************
- *
- * @fn      MSA_HandleKeys
- *
- * @brief   Callback service for keys
- *
- * @param   keys  - keys that were pressed
- *          state - shifted
- *
- * @return  void
- *
- **************************************************************************************************/
-void MSA_HandleKeys(uint8 keys, uint8 shift)
-{
-#ifdef HAL_BOARD_LM3S9B96
-  static uint8 msa_keyPressCount = 0;
-
-  /* LM3S9B96 board has only one switch. For MSA, pressing SW1 once generates HAL_KEY_SW_1 event.
-   * Pressing SW1 the 2nd time generates HAL_KEY_SW_2 event. Pressing SW1 the 3rd or more time
-   * also generates HAL_KEY_SW_2 event.
-   */
-  if (msa_keyPressCount == 0)
-  {
-    keys = HAL_KEY_SW_1;
-    msa_keyPressCount++;
-  }
-  else
-  {
-    keys = HAL_KEY_SW_2;
-  }
-#endif /* HAL_BOARD_LM3S9B96 */
-
-  if ( keys & HAL_KEY_SW_1 )
-  {
-    /* Start the device as a direct message device and beacon disabled*/
-    if (!msa_IsStarted)
-    {
-      /* Decide if direct or indirect messaging is used */
-      msa_IsDirectMsg = MSA_DIRECT_MSG_ENABLED;
-
-      if (msa_IsDirectMsg)
-      {
-        /* Start the device as an DIRECT messaging device */
-        if (msa_BeaconOrder != 15)
-          MSA_ScanReq(MAC_SCAN_PASSIVE, MSA_MAC_BEACON_ORDER + 1);
-        else
-          MSA_ScanReq(MAC_SCAN_ACTIVE, 3);
-      }
-      else
-      {
-         /* Start the device as an INDIRECT messaging device and beacon disabled */
-         /* Beacon network doesn't work with polling */
-         if (!msa_IsStarted)
-         {
-           msa_IsDirectMsg = FALSE;
-           MSA_ScanReq(MAC_SCAN_ACTIVE, 3);
-         }
-      }
-    }
-#ifdef HAL_BOARD_CC2530USB
-    /* CC2531DK_Dongle has no Reset button - use S1 if msa_IsStarted */
-    else
-    {
-      /* Wait until user releases S1 */
-      while ( HAL_PUSH_BUTTON1() );
-      /* Soft reset leaves USB stuff alone */
-      SystemResetSoft();
-    }
-#endif /* HAL_BOARD_CC2530USB */
-  }
-
-  if ( keys & HAL_KEY_SW_2 )
-  {
-    /* Start sending message */
-    if (msa_IsStarted)
-    {
-      /* Set App's state to SEND or IDLE */
-      if (msa_State == MSA_IDLE_STATE)
-        msa_State = MSA_SEND_STATE;
-      else
-        msa_State = MSA_IDLE_STATE;
-
-      /* Send Event to the App to carry out the changes */
-      osal_start_timerEx(MSA_TaskId, MSA_SEND_EVENT, 100);
-    }
+  if ( keys & HAL_KEY_SW_2 ){
   }
 }
-
-/**************************************************************************************************
- **************************************************************************************************/
