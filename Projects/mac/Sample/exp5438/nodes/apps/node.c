@@ -78,6 +78,7 @@ uint8   node_BeaconOrder      = NWK_MAC_BEACON_ORDER;
 int8    node_TxPower          = 19;
 /* Task ID */
 uint8   NODE_TaskId;
+uint8   nodeId = 1;
 /* flags used in the application */
 bool    isAssociated   = FALSE;
 bool    isGWDetect     = FALSE;
@@ -87,6 +88,8 @@ uint8   curRescanNum       = 0;
 uint8   scanTimeOut        = NODE_DEFAULT_SCAN_TIME_OUT;
 uint8   numRescanTry       = NODE_DEFAULT_NUM_RESCAN_TRY;
 uint16  rescanWaitTime     = NODE_DEFAULT_RESCAN_WAIT_TIME;
+uint8   numPollFail        = 0;
+
 /* Sensing time management */
 uint16  stickDuration  = NODE_DEFAULT_STICK_DURATION;
 uint16  preparingDelta = NODE_DEFAULT_PREPARING_DELTA;
@@ -94,7 +97,8 @@ uint16  sensingTime    = NODE_DEFAULT_SENSING_TIME;
 uint16  sendAliveTime  = NODE_DEFAULT_SEND_ALIVE_TIME;
 uint32  curStickTime   = 0;
 /* Sensing result */
-sensing_t ssResult;
+pkt_t   alivePkt;
+pkt_t   sensingPkt;
 
 /**** FUNCTIONs ****/
 void UART0Start(void);
@@ -130,6 +134,7 @@ void NODE_Init(uint8 taskId){
   MAC_InitCoord();
   MAC_MlmeResetReq(TRUE);   /* Reset the MAC */
 
+  HalLedSet(HAL_LED_2, HAL_LED_MODE_ON);
   UART0Start();             /* init UART0 for PC communication */
   osal_start_timerEx(NODE_TaskId, NODE_PREP_INIT_EVENT, 1000); /* delay 1s after power up */
 }
@@ -160,10 +165,19 @@ uint16 NODE_ProcessEvent(uint8 taskId, uint16 events)
         case MAC_MLME_POLL_CNF: /* poll result */
           pData = (macCbackEvent_t *) pMsg; /* Retrieve the message */
           switch (pData->hdr.status){
-            case MAC_SUCCESS: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: ok\n"); break;
+            case MAC_SUCCESS:
+              HalUARTPrintStr(HAL_UART_PORT_0,"POLL: ok\n");
+              numPollFail = 0;
+              break;
             case MAC_CHANNEL_ACCESS_FAILURE: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: access fail\n"); break;
             case MAC_INVALID_PARAMETER: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: invalid\n"); break;
-            case MAC_NO_ACK: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: no ACK\n"); break;
+            case MAC_NO_ACK:
+              HalUARTPrintStr(HAL_UART_PORT_0,"POLL: no ACK\n");
+              if (5 == numPollFail++){
+                isAssociated = FALSE;
+                HalUARTPrintStr(HAL_UART_PORT_0,"CONNECT: reset request\n");
+              }
+              break;
             case MAC_NO_DATA: HalUARTPrintStr(HAL_UART_PORT_0,"POLL: no DATA\n"); break;
           }
           break;
@@ -253,7 +267,8 @@ void ProcessScanFail(){
   }
   else{
     HalUARTPrintStr(HAL_UART_PORT_0, "SCAN: abort\n");
-   }
+    osal_pwrmgr_device( PWRMGR_BATTERY );
+  }
 }
 
 
@@ -308,6 +323,7 @@ void ProcessScanConfirmEvent(macCbackEvent_t* pData){
 void ProcessAssocConfirmEvent(macCbackEvent_t *pData){
   if ((!isAssociated) && (pData->associateCnf.hdr.status == MAC_SUCCESS)){
     isAssociated = TRUE;
+    numPollFail  = 0;
     node_DevShortAddr = pData->associateCnf.assocShortAddress; /* Retrieve MAC_SHORT_ADDRESS */
     MAC_MlmeSetReq(MAC_SHORT_ADDRESS, &node_DevShortAddr); /* Setup MAC_SHORT_ADDRESS - obtained from Association */
     HalUARTPrintStr(HAL_UART_PORT_0, "ASSOC: OK\n");
@@ -326,10 +342,11 @@ void ProcessAssocConfirmEvent(macCbackEvent_t *pData){
 
 void ProcessStickTimerEvent(){
   curStickTime++;
-  HalUARTPrintnlStrAndUInt(HAL_UART_PORT_0, "TIMER: fire ", curStickTime, 10);
+  //HalUARTPrintnlStrAndUInt(HAL_UART_PORT_0, "TIMER: fire ", curStickTime, 10);
   if (0 == (curStickTime % sensingTime)){
+    HalLedSet(HAL_LED_3, HAL_LED_MODE_ON);
     HalUARTPrintStr(HAL_UART_PORT_0,"\nSENING: sensing\n");
-    SS_Measure(&ssResult);
+    SS_Measure(&(sensingPkt.pktPara.sensingPara.sensingData));
     SS_Shutdown();
     if (isAssociated){
       HalUARTPrintStr(HAL_UART_PORT_0, "SEND: senResult\n");
@@ -341,12 +358,13 @@ void ProcessStickTimerEvent(){
       curRescanNum = 0;
       NWK_ScanReq(MAC_SCAN_ACTIVE, scanTimeOut);
     }
-    SS_Print(&ssResult); /* out result for debug */
+    SS_Print(&(sensingPkt.pktPara.sensingPara.sensingData)); /* out result for debug */
   }
   else{
     if (0 == ((curStickTime-preparingDelta) % sensingTime)){
       HalUARTPrintStr(HAL_UART_PORT_0,"SENING: prepare\n");
       SS_Prepare();
+      HalLedSet(HAL_LED_3, HAL_LED_MODE_ON);
     }
     if (0 == (curStickTime % sendAliveTime)){
       if (isAssociated){
@@ -359,6 +377,9 @@ void ProcessStickTimerEvent(){
         HalUARTPrintStr(HAL_UART_PORT_0, "PEND: alive\n");
       }
     }
+  }
+  if (isAssociated){
+    HalLedSet(HAL_LED_2, HAL_LED_MODE_TOGGLE);
   }
 }
 
@@ -408,6 +429,7 @@ void NODE_SendDirect(pktType_t pktType, uint8* pktPara, uint8 paraLen, uint16 ds
   macMcpsDataReq_t*  sentMACPkt    = NULL;
   pkt_t *dstAppPkt;
 
+  MAC_PwrOnReq();
   sentMACPkt = MAC_McpsDataAlloc(sizeof(pktType_t)+paraLen, MAC_SEC_LEVEL_NONE, MAC_KEY_ID_MODE_IMPLICIT );
   if ((NULL == sentMACPkt)){
     HalUARTPrintStr(HAL_UART_PORT_0, "MEM: deny\n");
@@ -432,17 +454,19 @@ void NODE_SendDirect(pktType_t pktType, uint8* pktPara, uint8 paraLen, uint16 ds
 }
 
 void NODE_SendAlive(void){
-  NODE_SendDirect(PKT_ALIVE_TYPE, (uint8*) &curStickTime, sizeof(curStickTime), node_CoordShortAddr);
+  alivePkt.pktPara.alivePara.curTime = curStickTime;
+  alivePkt.pktPara.alivePara.nodeId  = nodeId;
+  NODE_SendDirect(PKT_ALIVE_TYPE, (uint8*) &(alivePkt.pktPara.alivePara), sizeof(alivePara_t), node_CoordShortAddr);
 }
 
 
 void NODE_SendSensingResult(void){
-  NODE_SendDirect(PKT_SENSING_TYPE, (uint8*) &ssResult, sizeof(ssResult), node_CoordShortAddr);
+  NODE_SendDirect(PKT_SENSING_TYPE, (uint8*) &(sensingPkt.pktPara.sensingPara),
+                  sizeof(sensingPara_t), node_CoordShortAddr);
 }
 
 
-void NODE_PollRequest(void)
-{
+void NODE_PollRequest(void){
   macMlmePollReq_t  pollReq;
 
   /* Fill in information for poll request */
@@ -464,19 +488,12 @@ void NODE_PollRequest(void)
 void NODE_HandleKeys(uint8 keys, uint8 shift)
 {
   if (keys & HAL_KEY_SW_1){
-    HalLedSet(HAL_LED_2, HAL_LED_MODE_ON);
-    HalUARTPrintnlStr(HAL_UART_PORT_0, "HELLO");
   }
   else if (keys & HAL_KEY_SW_2){
-    HalLedSet(HAL_LED_2, HAL_LED_MODE_OFF);
-    HalUARTPrintnlStrAndUInt(HAL_UART_PORT_0, "UInt", 23524563, 16);
-  }
+   }
   else if (keys & HAL_KEY_SW_3){
-    HalLedSet(HAL_LED_2, HAL_LED_MODE_TOGGLE);
-    HalUARTPrintnlStrAndInt(HAL_UART_PORT_0, "Int", -123456789, 10);
-  }
+ }
   else if (keys & HAL_KEY_SW_1){
-    HalLedBlink(HAL_LED_2, 0, 50, 200);
   }
 }
 

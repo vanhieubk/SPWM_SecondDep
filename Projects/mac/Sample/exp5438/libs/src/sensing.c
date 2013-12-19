@@ -187,13 +187,6 @@ uint16_t _SS_GetAdc(uint8_t channel){
 
 
 void SS_Print(sensing_t* ssResult){
-  HalUARTPrintStr(HAL_UART_PORT_0,"\n**************************\n");
-  HalUARTPrintStrAndUInt(HAL_UART_PORT_0,"nodeId: ", ssResult->nodeId, 10);
-  HalUARTPrintStrAndUInt(HAL_UART_PORT_0," runTime: ", ssResult->runTime, 10);
-  HalUARTPrintStrAndUInt(HAL_UART_PORT_0," blk: ", ssResult->storeBlock, 10);
-  HalUARTPrintStrAndUInt(HAL_UART_PORT_0," sysClk: ", ssResult->sendSysClk, 10);
-  HalUARTPrintStrAndUInt(HAL_UART_PORT_0," sqc: ", ssResult->sequence, 10);
-
   HalUARTPrintStr(HAL_UART_PORT_0,"\n--------------------------\n");
   for (uint8 i=0; i<16; i++){
     HalUARTPrintStrAndUInt(HAL_UART_PORT_0, "  pHADC[", i, 10);

@@ -4,11 +4,6 @@
 #include "arch_port.h"
 
 typedef struct {
-  uint16_t nodeId;
-  uint16_t runTime;
-  uint16_t storeBlock;
-  uint32_t sendSysClk;
-  uint32_t sequence;
   uint16_t pHAdc[16];
 
   uint16_t vddAdcAvg;

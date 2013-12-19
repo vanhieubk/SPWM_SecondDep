@@ -66,11 +66,6 @@ int main(void)
 
   /* Setup Keyboard callback */
   HalKeyConfig(NODE_KEY_INT_ENABLED, NODE_KeyCallback);
-  HalLedBlink(HAL_LED_1, 0, 50, 1000);
-  HalLedBlink(HAL_LED_2, 0, 50, 1000);
-  HalLedBlink(HAL_LED_3, 0, 50, 1000);
-  HalLedBlink(HAL_LED_4, 0, 50, 1000);
-  HalLedBlink(HAL_LED_5, 0, 50, 1000);
   /* Start OSAL */
   OSAL_START_SYSTEM();
 

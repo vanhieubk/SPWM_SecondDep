@@ -66,7 +66,6 @@ int main(void)
 
   /* Setup Keyboard callback */
   HalKeyConfig(GW_KEY_INT_ENABLED, Gateway_KeyCallback);
-  HalLedBlink(HAL_LED_1, 0, 50, 1000);
   /* Start OSAL */
   OSAL_START_SYSTEM();
 
